@@ -1,0 +1,122 @@
+#==============================================================================
+# ShopDeploy - Grafana Helm Values
+# Production dashboard configuration
+#==============================================================================
+
+# Full name override
+fullnameOverride: "grafana"
+
+# Admin credentials (change in production)
+adminUser: admin
+# adminPassword is set via --set or secret
+
+# Persistence
+persistence:
+  enabled: true
+  size: 10Gi
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Service
+service:
+  type: LoadBalancer
+  port: 80
+
+# Ingress
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+  hosts:
+    - grafana.shopdeploy.example.com
+
+# Data sources
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server:80
+        access: proxy
+        isDefault: true
+      - name: CloudWatch
+        type: cloudwatch
+        access: proxy
+        jsonData:
+          authType: default
+          defaultRegion: us-east-1
+
+# Dashboard providers
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+      - name: 'shopdeploy'
+        orgId: 1
+        folder: 'ShopDeploy'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/shopdeploy
+
+# Pre-built dashboards
+dashboards:
+  default:
+    # Kubernetes cluster monitoring
+    kubernetes-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Prometheus
+    
+    # Node exporter
+    node-exporter:
+      gnetId: 1860
+      revision: 27
+      datasource: Prometheus
+    
+    # Kubernetes pods
+    kubernetes-pods:
+      gnetId: 6417
+      revision: 1
+      datasource: Prometheus
+
+# Sidecar for dynamic dashboard loading
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    folder: /var/lib/grafana/dashboards
+  datasources:
+    enabled: true
+    label: grafana_datasource
+
+# SMTP for alerts (optional)
+# smtp:
+#   enabled: true
+#   host: smtp.example.com:587
+#   user: alerts@shopdeploy.com
+#   password: ""
+
+# Plugins
+plugins:
+  - grafana-piechart-panel
+  - grafana-clock-panel
+  - grafana-worldmap-panel

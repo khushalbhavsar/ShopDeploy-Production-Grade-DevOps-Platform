@@ -1,0 +1,15 @@
+apiVersion: v2
+name: shopdeploy-frontend
+description: Helm chart for ShopDeploy Frontend (React/Vite)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - frontend
+  - react
+  - vite
+  - nginx
+  - ecommerce
+maintainers:
+  - name: DevOps Team
+    email: devops@shopdeploy.com

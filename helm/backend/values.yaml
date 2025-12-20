@@ -1,0 +1,223 @@
+#==============================================================================
+# ShopDeploy Backend - Helm Values
+# Production-grade configuration for E-Commerce Backend API
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Global Configuration
+#------------------------------------------------------------------------------
+global:
+  environment: production
+  namespace: shopdeploy
+
+#------------------------------------------------------------------------------
+# Replica Configuration
+#------------------------------------------------------------------------------
+replicaCount: 2
+
+#------------------------------------------------------------------------------
+# Image Configuration
+#------------------------------------------------------------------------------
+image:
+  repository: ""  # Set via --set or values override: AWS_ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/shopdeploy-prod-backend
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+#------------------------------------------------------------------------------
+# Service Account
+#------------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "backend-sa"
+
+#------------------------------------------------------------------------------
+# Pod Configuration
+#------------------------------------------------------------------------------
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5000"
+  prometheus.io/path: "/api/health/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+#------------------------------------------------------------------------------
+# Service Configuration
+#------------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+  annotations: {}
+
+#------------------------------------------------------------------------------
+# Ingress Configuration
+#------------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+  hosts:
+    - host: api.shopdeploy.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+  tls: []
+  #  - secretName: backend-tls
+  #    hosts:
+  #      - api.shopdeploy.example.com
+
+#------------------------------------------------------------------------------
+# Resource Limits
+#------------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+#------------------------------------------------------------------------------
+# Autoscaling (HPA)
+#------------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+#------------------------------------------------------------------------------
+# Health Probes
+#------------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /api/health/health
+    port: 5000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/health/ready
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /api/health/health
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+#------------------------------------------------------------------------------
+# Node Selection
+#------------------------------------------------------------------------------
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - shopdeploy-backend
+          topologyKey: kubernetes.io/hostname
+
+#------------------------------------------------------------------------------
+# Environment Variables (Non-Sensitive)
+#------------------------------------------------------------------------------
+env:
+  NODE_ENV: "production"
+  PORT: "5000"
+  JWT_ACCESS_EXPIRE: "15m"
+  JWT_REFRESH_EXPIRE: "7d"
+
+#------------------------------------------------------------------------------
+# ConfigMap Reference
+#------------------------------------------------------------------------------
+configMapRef:
+  enabled: true
+  name: backend-config
+
+#------------------------------------------------------------------------------
+# Secrets Reference
+#------------------------------------------------------------------------------
+secretRef:
+  enabled: true
+  name: backend-secrets
+
+#------------------------------------------------------------------------------
+# External Secrets (for AWS Secrets Manager integration)
+#------------------------------------------------------------------------------
+externalSecrets:
+  enabled: false
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+#------------------------------------------------------------------------------
+# Pod Disruption Budget
+#------------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+#------------------------------------------------------------------------------
+# Network Policy
+#------------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: shopdeploy
+      ports:
+        - protocol: TCP
+          port: 5000
+
+#------------------------------------------------------------------------------
+# Monitoring
+#------------------------------------------------------------------------------
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    namespace: monitoring
+    interval: 30s

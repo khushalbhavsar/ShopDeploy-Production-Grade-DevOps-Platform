@@ -1,0 +1,15 @@
+apiVersion: v2
+name: shopdeploy-backend
+description: Helm chart for ShopDeploy Backend API (Node.js/Express)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - backend
+  - api
+  - nodejs
+  - express
+  - ecommerce
+maintainers:
+  - name: DevOps Team
+    email: devops@shopdeploy.com

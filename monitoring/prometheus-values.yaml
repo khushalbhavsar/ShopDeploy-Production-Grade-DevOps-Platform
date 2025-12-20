@@ -1,0 +1,192 @@
+#==============================================================================
+# ShopDeploy - Prometheus Helm Values
+# Production monitoring configuration
+#==============================================================================
+
+# Full name override
+fullnameOverride: "prometheus"
+
+# Enable alertmanager
+alertmanager:
+  enabled: true
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+  config:
+    global:
+      slack_api_url: ''  # Set via --set
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'slack-notifications'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'slack-critical'
+        - match:
+            severity: warning
+          receiver: 'slack-notifications'
+    receivers:
+      - name: 'slack-notifications'
+        slack_configs:
+          - channel: '#devops-alerts'
+            send_resolved: true
+            title: '{{ template "slack.default.title" . }}'
+            text: '{{ template "slack.default.text" . }}'
+      - name: 'slack-critical'
+        slack_configs:
+          - channel: '#devops-critical'
+            send_resolved: true
+
+# Prometheus server configuration
+server:
+  enabled: true
+  persistentVolume:
+    enabled: true
+    size: 50Gi
+  retention: "15d"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+  
+  # Scrape configurations
+  extraScrapeConfigs:
+    - job_name: 'shopdeploy-backend'
+      kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+              - shopdeploy
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: kubernetes_pod_name
+
+# Push gateway (for batch jobs)
+pushgateway:
+  enabled: false
+
+# Node exporter (host metrics)
+nodeExporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 50Mi
+
+# Kube state metrics
+kubeStateMetrics:
+  enabled: true
+
+# Custom alerting rules
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: shopdeploy-alerts
+        rules:
+          # High CPU usage
+          - alert: HighCPUUsage
+            expr: |
+              100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage detected"
+              description: "CPU usage is above 80% for more than 5 minutes"
+
+          # High Memory usage
+          - alert: HighMemoryUsage
+            expr: |
+              (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage detected"
+              description: "Memory usage is above 85% for more than 5 minutes"
+
+          # Pod not ready
+          - alert: PodNotReady
+            expr: |
+              kube_pod_status_ready{condition="true",namespace="shopdeploy"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod not ready"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is not ready"
+
+          # High pod restart count
+          - alert: HighPodRestartCount
+            expr: |
+              increase(kube_pod_container_status_restarts_total{namespace="shopdeploy"}[1h]) > 5
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High pod restart count"
+              description: "Pod {{ $labels.pod }} has restarted more than 5 times in the last hour"
+
+          # Backend response time
+          - alert: HighResponseTime
+            expr: |
+              histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="shopdeploy-backend"}[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High API response time"
+              description: "95th percentile response time is above 2 seconds"
+
+          # Error rate
+          - alert: HighErrorRate
+            expr: |
+              rate(http_requests_total{job="shopdeploy-backend",status=~"5.."}[5m]) / rate(http_requests_total{job="shopdeploy-backend"}[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is above 5% for the backend API"
+
+          # Disk space
+          - alert: LowDiskSpace
+            expr: |
+              (node_filesystem_avail_bytes{fstype=~"ext4|xfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs"}) * 100 < 15
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Low disk space"
+              description: "Disk space is below 15% on {{ $labels.device }}"
+
+          # HPA at max
+          - alert: HPAAtMaxCapacity
+            expr: |
+              kube_horizontalpodautoscaler_status_current_replicas{namespace="shopdeploy"} == kube_horizontalpodautoscaler_spec_max_replicas{namespace="shopdeploy"}
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "HPA at maximum capacity"
+              description: "HPA {{ $labels.horizontalpodautoscaler }} is at maximum replicas"

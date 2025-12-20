@@ -1,0 +1,165 @@
+#==============================================================================
+# ShopDeploy Frontend - Helm Values
+# Production-grade configuration for E-Commerce Frontend
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Global Configuration
+#------------------------------------------------------------------------------
+global:
+  environment: production
+  namespace: shopdeploy
+
+#------------------------------------------------------------------------------
+# Replica Configuration
+#------------------------------------------------------------------------------
+replicaCount: 2
+
+#------------------------------------------------------------------------------
+# Image Configuration
+#------------------------------------------------------------------------------
+image:
+  repository: ""  # Set via --set: AWS_ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/shopdeploy-prod-frontend
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+#------------------------------------------------------------------------------
+# Service Account
+#------------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "frontend-sa"
+
+#------------------------------------------------------------------------------
+# Pod Configuration
+#------------------------------------------------------------------------------
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "80"
+
+podSecurityContext:
+  runAsNonRoot: false
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+
+#------------------------------------------------------------------------------
+# Service Configuration
+#------------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+#------------------------------------------------------------------------------
+# Ingress Configuration
+#------------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: shopdeploy.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: frontend-tls
+  #    hosts:
+  #      - shopdeploy.example.com
+
+#------------------------------------------------------------------------------
+# Resource Limits
+#------------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+#------------------------------------------------------------------------------
+# Autoscaling (HPA)
+#------------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+#------------------------------------------------------------------------------
+# Health Probes
+#------------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+#------------------------------------------------------------------------------
+# Node Selection
+#------------------------------------------------------------------------------
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - shopdeploy-frontend
+          topologyKey: kubernetes.io/hostname
+
+#------------------------------------------------------------------------------
+# ConfigMap Reference
+#------------------------------------------------------------------------------
+configMapRef:
+  enabled: true
+  name: frontend-config
+
+#------------------------------------------------------------------------------
+# Pod Disruption Budget
+#------------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+#------------------------------------------------------------------------------
+# Network Policy
+#------------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
