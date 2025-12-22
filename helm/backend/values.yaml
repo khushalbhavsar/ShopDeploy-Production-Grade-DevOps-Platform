@@ -44,10 +44,6 @@ podAnnotations:
 podSecurityContext: {}
 
 securityContext: {}
-  capabilities:
-    drop:
-      - ALL
-  readOnlyRootFilesystem: false
 
 #------------------------------------------------------------------------------
 # Service Configuration
