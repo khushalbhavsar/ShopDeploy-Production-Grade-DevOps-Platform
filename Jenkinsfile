@@ -34,9 +34,6 @@ pipeline {
         // Application Paths
         BACKEND_DIR = 'shopdeploy-backend'
         FRONTEND_DIR = 'shopdeploy-frontend'
-        
-        // Email Notification
-        EMAIL_RECIPIENTS = 'devops-team@yourcompany.com'
     }
 
     //--------------------------------------------------------------------------
@@ -394,20 +391,6 @@ pipeline {
                     echo "Stage: Production Deployment Approval"
                     echo "=========================================="
                     
-                    // Send email notification for approval
-                    emailext(
-                        to: env.EMAIL_RECIPIENTS,
-                        subject: "[ACTION REQUIRED] Production Deployment Approval - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>⚠️ Production Deployment Approval Required</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
-                            <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
-                            <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
-                            <p><strong>Approve:</strong> <a href="${env.BUILD_URL}input">Click here to approve</a></p>
-                        """,
-                        mimeType: 'text/html'
-                    )
-                    
                     timeout(time: 30, unit: 'MINUTES') {
                         input(
                             message: 'Deploy to Production?',
@@ -490,38 +473,11 @@ pipeline {
     //--------------------------------------------------------------------------
     post {
         success {
-            script {
-                emailext(
-                    to: env.EMAIL_RECIPIENTS,
-                    subject: "✅ Deployment Successful - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                    body: """
-                        <h2>✅ Deployment Successful</h2>
-                        <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
-                        <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
-                        <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                        <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
-                        <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
-                    """,
-                    mimeType: 'text/html'
-                )
-            }
+            echo 'Deployment completed successfully!'
         }
         failure {
             script {
-                emailext(
-                    to: env.EMAIL_RECIPIENTS,
-                    subject: "❌ Deployment Failed - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                    body: """
-                        <h2>❌ Deployment Failed</h2>
-                        <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
-                        <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
-                        <p><strong>Failed Stage:</strong> ${env.STAGE_NAME}</p>
-                        <p><strong>Console Output:</strong> <a href="${env.BUILD_URL}console">View Logs</a></p>
-                        <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
-                        <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
-                    """,
-                    mimeType: 'text/html'
-                )
+                echo 'Deployment failed!'
                 
                 // Trigger rollback for production failures
                 if (params.ENVIRONMENT == 'prod') {
