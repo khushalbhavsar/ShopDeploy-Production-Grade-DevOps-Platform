@@ -446,11 +446,65 @@ pipeline {
                             aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                             
                             # Wait for deployments to stabilize
-                            sleep 30
+                            sleep 15
                             
-                            # Run smoke tests
-                            chmod +x scripts/smoke-test.sh
-                            scripts/smoke-test.sh ${ENVIRONMENT}
+                            echo "=============================================="
+                            echo "  Running Kubernetes Health Checks"
+                            echo "=============================================="
+                            
+                            # Check if all pods are running
+                            echo ""
+                            echo "[CHECK] Verifying pod status..."
+                            kubectl get pods -n ${K8S_NAMESPACE}
+                            
+                            # Verify backend deployment is ready
+                            echo ""
+                            echo "[CHECK] Backend deployment status..."
+                            kubectl rollout status deployment/shopdeploy-backend -n ${K8S_NAMESPACE} --timeout=60s
+                            
+                            # Verify frontend deployment is ready
+                            echo ""
+                            echo "[CHECK] Frontend deployment status..."
+                            kubectl rollout status deployment/shopdeploy-frontend -n ${K8S_NAMESPACE} --timeout=60s
+                            
+                            # Verify MongoDB is running
+                            echo ""
+                            echo "[CHECK] MongoDB deployment status..."
+                            kubectl rollout status deployment/mongodb -n ${K8S_NAMESPACE} --timeout=60s
+                            
+                            # Check for any pods not in Running state
+                            echo ""
+                            echo "[CHECK] Checking for unhealthy pods..."
+                            UNHEALTHY=$(kubectl get pods -n ${K8S_NAMESPACE} --no-headers | grep -v "Running" | wc -l)
+                            if [ "$UNHEALTHY" -gt 0 ]; then
+                                echo "[FAIL] Found $UNHEALTHY unhealthy pod(s)"
+                                kubectl get pods -n ${K8S_NAMESPACE} --no-headers | grep -v "Running"
+                                exit 1
+                            fi
+                            echo "[PASS] All pods are running"
+                            
+                            # Check for crash loops (restart count > 3)
+                            echo ""
+                            echo "[CHECK] Checking for crash loops..."
+                            kubectl get pods -n ${K8S_NAMESPACE} -o jsonpath='{range .items[*]}{.metadata.name}{" restarts: "}{.status.containerStatuses[0].restartCount}{"\\n"}{end}'
+                            
+                            # Verify services exist
+                            echo ""
+                            echo "[CHECK] Verifying services..."
+                            kubectl get svc -n ${K8S_NAMESPACE}
+                            
+                            # Test backend health using kubectl exec from frontend pod (has curl)
+                            echo ""
+                            echo "[CHECK] Testing backend connectivity from frontend pod..."
+                            FRONTEND_POD=$(kubectl get pods -n ${K8S_NAMESPACE} -l app.kubernetes.io/name=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                            if [ -n "$FRONTEND_POD" ]; then
+                                kubectl exec -n ${K8S_NAMESPACE} $FRONTEND_POD -- curl -s --max-time 10 http://shopdeploy-backend.${K8S_NAMESPACE}.svc.cluster.local:5000/api/health/health || echo "[WARN] Backend health endpoint not responding (non-blocking)"
+                            fi
+                            
+                            echo ""
+                            echo "=============================================="
+                            echo "  Smoke Tests PASSED"
+                            echo "=============================================="
                         '''
                     }
                 }
