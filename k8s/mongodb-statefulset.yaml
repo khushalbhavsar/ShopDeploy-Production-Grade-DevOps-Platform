@@ -1,20 +1,6 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mongodb-pvc
-  namespace: shopdeploy
-  labels:
-    app: shopdeploy
-    component: mongodb
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
+# MongoDB Deployment (using emptyDir for dev - no persistent storage needed)
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: mongodb
   namespace: shopdeploy
@@ -22,7 +8,6 @@ metadata:
     app: shopdeploy
     component: mongodb
 spec:
-  serviceName: mongo-service
   replicas: 1
   selector:
     matchLabels:
@@ -49,16 +34,6 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-          livenessProbe:
-            exec:
-              command:
-                - mongosh
-                - --eval
-                - "db.adminCommand('ping')"
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
           readinessProbe:
             exec:
               command:
@@ -71,8 +46,7 @@ spec:
             failureThreshold: 3
       volumes:
         - name: mongodb-data
-          persistentVolumeClaim:
-            claimName: mongodb-pvc
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

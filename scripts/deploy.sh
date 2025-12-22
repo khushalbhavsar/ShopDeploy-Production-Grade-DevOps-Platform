@@ -124,7 +124,7 @@ deploy_mongodb() {
     log_step "Deploying MongoDB..."
     
     # Check if MongoDB is already running
-    if kubectl get statefulset mongodb -n ${K8S_NAMESPACE} &>/dev/null; then
+    if kubectl get deployment mongodb -n ${K8S_NAMESPACE} &>/dev/null; then
         log_info "MongoDB is already deployed"
         return 0
     fi
@@ -134,7 +134,7 @@ deploy_mongodb() {
     
     # Wait for MongoDB to be ready
     log_info "Waiting for MongoDB to be ready..."
-    kubectl rollout status statefulset/mongodb -n ${K8S_NAMESPACE} --timeout=5m || log_warn "MongoDB may not be fully ready yet"
+    kubectl rollout status deployment/mongodb -n ${K8S_NAMESPACE} --timeout=3m || log_warn "MongoDB may not be fully ready yet"
 }
 
 #------------------------------------------------------------------------------
