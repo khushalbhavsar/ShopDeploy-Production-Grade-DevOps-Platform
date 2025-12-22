@@ -35,8 +35,8 @@ pipeline {
         BACKEND_DIR = 'shopdeploy-backend'
         FRONTEND_DIR = 'shopdeploy-frontend'
         
-        // Notification
-        SLACK_CHANNEL = '#devops-alerts'
+        // Email Notification
+        EMAIL_RECIPIENTS = 'devops-team@yourcompany.com'
     }
 
     //--------------------------------------------------------------------------
@@ -394,17 +394,18 @@ pipeline {
                     echo "Stage: Production Deployment Approval"
                     echo "=========================================="
                     
-                    // Send notification for approval
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'warning',
-                        message: """
-                            :warning: *Production Deployment Approval Required*
-                            Job: ${env.JOB_NAME} #${env.BUILD_NUMBER}
-                            Changes: ${env.GIT_COMMIT_MSG}
-                            Author: ${env.GIT_AUTHOR}
-                            Approve: ${env.BUILD_URL}input
-                        """
+                    // Send email notification for approval
+                    emailext(
+                        to: env.EMAIL_RECIPIENTS,
+                        subject: "[ACTION REQUIRED] Production Deployment Approval - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>⚠️ Production Deployment Approval Required</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
+                            <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
+                            <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
+                            <p><strong>Approve:</strong> <a href="${env.BUILD_URL}input">Click here to approve</a></p>
+                        """,
+                        mimeType: 'text/html'
                     )
                     
                     timeout(time: 30, unit: 'MINUTES') {
@@ -490,34 +491,36 @@ pipeline {
     post {
         success {
             script {
-                slackSend(
-                    channel: env.SLACK_CHANNEL,
-                    color: 'good',
-                    message: """
-                        :white_check_mark: *Deployment Successful*
-                        Job: ${env.JOB_NAME} #${env.BUILD_NUMBER}
-                        Environment: ${params.ENVIRONMENT}
-                        Duration: ${currentBuild.durationString}
-                        Changes: ${env.GIT_COMMIT_MSG}
-                        Author: ${env.GIT_AUTHOR}
-                    """
+                emailext(
+                    to: env.EMAIL_RECIPIENTS,
+                    subject: "✅ Deployment Successful - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: """
+                        <h2>✅ Deployment Successful</h2>
+                        <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
+                        <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
+                        <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                        <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
+                        <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
+                    """,
+                    mimeType: 'text/html'
                 )
             }
         }
         failure {
             script {
-                slackSend(
-                    channel: env.SLACK_CHANNEL,
-                    color: 'danger',
-                    message: """
-                        :x: *Deployment Failed*
-                        Job: ${env.JOB_NAME} #${env.BUILD_NUMBER}
-                        Environment: ${params.ENVIRONMENT}
-                        Stage: ${env.STAGE_NAME}
-                        Console: ${env.BUILD_URL}console
-                        Changes: ${env.GIT_COMMIT_MSG}
-                        Author: ${env.GIT_AUTHOR}
-                    """
+                emailext(
+                    to: env.EMAIL_RECIPIENTS,
+                    subject: "❌ Deployment Failed - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: """
+                        <h2>❌ Deployment Failed</h2>
+                        <p><strong>Job:</strong> ${env.JOB_NAME} #${env.BUILD_NUMBER}</p>
+                        <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
+                        <p><strong>Failed Stage:</strong> ${env.STAGE_NAME}</p>
+                        <p><strong>Console Output:</strong> <a href="${env.BUILD_URL}console">View Logs</a></p>
+                        <p><strong>Changes:</strong> ${env.GIT_COMMIT_MSG}</p>
+                        <p><strong>Author:</strong> ${env.GIT_AUTHOR}</p>
+                    """,
+                    mimeType: 'text/html'
                 )
                 
                 // Trigger rollback for production failures
