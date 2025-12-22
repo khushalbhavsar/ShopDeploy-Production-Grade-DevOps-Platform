@@ -430,20 +430,29 @@ pipeline {
         // Stage 11: Smoke Tests
         //----------------------------------------------------------------------
         stage('Smoke Tests') {
+            when {
+                expression { env.BACKEND_CHANGED == 'true' || env.FRONTEND_CHANGED == 'true' }
+            }
             steps {
                 script {
                     echo "=========================================="
                     echo "Stage: Post-Deployment Smoke Tests"
                     echo "=========================================="
                     
-                    sh '''
-                        # Wait for deployments to stabilize
-                        sleep 30
-                        
-                        # Run smoke tests
-                        chmod +x scripts/smoke-test.sh
-                        scripts/smoke-test.sh ${ENVIRONMENT}
-                    '''
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
+                                      credentialsId: 'aws-credentials']]) {
+                        sh '''
+                            # Configure kubectl for EKS
+                            aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                            
+                            # Wait for deployments to stabilize
+                            sleep 30
+                            
+                            # Run smoke tests
+                            chmod +x scripts/smoke-test.sh
+                            scripts/smoke-test.sh ${ENVIRONMENT}
+                        '''
+                    }
                 }
             }
         }
