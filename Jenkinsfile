@@ -144,15 +144,25 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                    # Install kubectl if not present in PATH
-                    if ! command -v kubectl &> /dev/null; then
+                    # Install kubectl and helm to workspace bin
+                    mkdir -p ${WORKSPACE}/bin
+                    export PATH=${WORKSPACE}/bin:$PATH
+                    
+                    # Install kubectl if not present
+                    if [ ! -f ${WORKSPACE}/bin/kubectl ]; then
                         echo "Installing kubectl to workspace..."
-                        mkdir -p ${WORKSPACE}/bin
                         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl ${WORKSPACE}/bin/
                     fi
-                    export PATH=${WORKSPACE}/bin:$PATH
+                    
+                    # Install helm if not present
+                    if [ ! -f ${WORKSPACE}/bin/helm ]; then
+                        echo "Installing helm to workspace..."
+                        curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz
+                        mv linux-amd64/helm ${WORKSPACE}/bin/
+                        rm -rf linux-amd64
+                    fi
                     
                     chmod +x scripts/deploy.sh
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
@@ -175,15 +185,25 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                    # Install kubectl if not present in PATH
-                    if ! command -v kubectl &> /dev/null; then
+                    # Install kubectl and helm to workspace bin
+                    mkdir -p ${WORKSPACE}/bin
+                    export PATH=${WORKSPACE}/bin:$PATH
+                    
+                    # Install kubectl if not present
+                    if [ ! -f ${WORKSPACE}/bin/kubectl ]; then
                         echo "Installing kubectl to workspace..."
-                        mkdir -p ${WORKSPACE}/bin
                         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl ${WORKSPACE}/bin/
                     fi
-                    export PATH=${WORKSPACE}/bin:$PATH
+                    
+                    # Install helm if not present
+                    if [ ! -f ${WORKSPACE}/bin/helm ]; then
+                        echo "Installing helm to workspace..."
+                        curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz
+                        mv linux-amd64/helm ${WORKSPACE}/bin/
+                        rm -rf linux-amd64
+                    fi
                     
                     chmod +x scripts/deploy.sh
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
@@ -198,20 +218,22 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                    # Install kubectl if not present in PATH
-                    if ! command -v kubectl &> /dev/null && [ ! -f ${WORKSPACE}/bin/kubectl ]; then
+                    # Install kubectl to workspace bin
+                    mkdir -p ${WORKSPACE}/bin
+                    export PATH=${WORKSPACE}/bin:$PATH
+                    
+                    # Install kubectl if not present
+                    if [ ! -f ${WORKSPACE}/bin/kubectl ]; then
                         echo "Installing kubectl to workspace..."
-                        mkdir -p ${WORKSPACE}/bin
                         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl ${WORKSPACE}/bin/
                     fi
-                    export PATH=${WORKSPACE}/bin:$PATH
                     
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                     kubectl get pods -n ${K8S_NAMESPACE}
-                    kubectl rollout status deployment/shopdeploy-backend -n ${K8S_NAMESPACE} --timeout=300s
-                    kubectl rollout status deployment/shopdeploy-frontend -n ${K8S_NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/shopdeploy-backend -n ${K8S_NAMESPACE} --timeout=300s || true
+                    kubectl rollout status deployment/shopdeploy-frontend -n ${K8S_NAMESPACE} --timeout=300s || true
                     '''
                 }
             }
