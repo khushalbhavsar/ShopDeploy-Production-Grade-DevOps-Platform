@@ -33,7 +33,7 @@ pipeline {
     parameters {
         choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'])
         booleanParam(name: 'SKIP_TESTS', defaultValue: false)
-        booleanParam(name: 'SKIP_SONAR', defaultValue: false)
+        booleanParam(name: 'SKIP_SONAR', defaultValue: true, description: 'Skip SonarQube analysis (set to false once SonarQube is configured in Jenkins)')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false)
     }
 
@@ -77,9 +77,11 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh """
-                    npx sonar-scanner \
+                    # Use sonar-scanner from Jenkins tool or PATH
+                    sonar-scanner \
                       -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.sources=.
+                      -Dsonar.sources=. \
+                      -Dsonar.exclusions=node_modules/**,**/test/**
                     """
                 }
             }
