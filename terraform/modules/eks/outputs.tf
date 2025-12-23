@@ -51,3 +51,8 @@ output "node_group_status" {
   description = "Status of the EKS node group"
   value       = aws_eks_node_group.main.status
 }
+
+output "ebs_csi_driver_role_arn" {
+  description = "ARN of the EBS CSI Driver IAM role"
+  value       = aws_iam_role.ebs_csi_driver.arn
+}
