@@ -144,6 +144,15 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
+                    # Install kubectl if not present
+                    if ! command -v kubectl &> /dev/null; then
+                        echo "Installing kubectl..."
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        sudo mv kubectl /usr/local/bin/ || mv kubectl ./kubectl
+                        export PATH=$PATH:$(pwd)
+                    fi
+                    
                     chmod +x scripts/deploy.sh
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                     scripts/deploy.sh backend ${IMAGE_TAG} ${ENVIRONMENT}
@@ -165,6 +174,15 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
+                    # Install kubectl if not present
+                    if ! command -v kubectl &> /dev/null; then
+                        echo "Installing kubectl..."
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        sudo mv kubectl /usr/local/bin/ || mv kubectl ./kubectl
+                        export PATH=$PATH:$(pwd)
+                    fi
+                    
                     chmod +x scripts/deploy.sh
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                     scripts/deploy.sh backend ${IMAGE_TAG} prod
@@ -178,6 +196,15 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
+                    # Install kubectl if not present
+                    if ! command -v kubectl &> /dev/null; then
+                        echo "Installing kubectl..."
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        sudo mv kubectl /usr/local/bin/ || mv kubectl ./kubectl
+                        export PATH=$PATH:$(pwd)
+                    fi
+                    
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                     kubectl get pods -n ${K8S_NAMESPACE}
                     kubectl rollout status deployment/shopdeploy-backend -n ${K8S_NAMESPACE} --timeout=300s
