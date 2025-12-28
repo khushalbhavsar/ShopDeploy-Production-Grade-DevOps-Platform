@@ -55,7 +55,7 @@ pipeline {
         booleanParam(
             name: 'SKIP_SONAR',
             defaultValue: true,
-            description: 'Skip SonarQube analysis (set to false once SonarQube is configured)'
+            description: 'Skip SonarQube analysis (set to false once SonarQube Scanner is installed on Jenkins)'
         )
         booleanParam(
             name: 'FORCE_DEPLOY',
@@ -243,19 +243,28 @@ pipeline {
         //======================================================================
         stage('SonarQube Analysis') {
             when {
-                expression { !params.SKIP_SONAR }
+                expression { params.SKIP_SONAR == false }
             }
             steps {
                 echo '📊 Running SonarQube analysis...'
-                withSonarQubeEnv('SonarQube') {
-                    sh """
-                        sonar-scanner \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.projectName=ShopDeploy \
-                            -Dsonar.sources=. \
-                            -Dsonar.exclusions=node_modules/**,**/test/**,**/coverage/**,**/*.spec.js \
-                            -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info
-                    """
+                script {
+                    // Check if sonar-scanner is available
+                    def scannerExists = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
+                    if (!scannerExists) {
+                        echo '⚠️ sonar-scanner not found. Skipping SonarQube analysis.'
+                        echo '💡 Install SonarQube Scanner on Jenkins or set SKIP_SONAR=true'
+                    } else {
+                        withSonarQubeEnv('SonarQube') {
+                            sh """
+                                sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.projectName=ShopDeploy \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.exclusions=node_modules/**,**/test/**,**/coverage/**,**/*.spec.js \
+                                    -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info
+                            """
+                        }
+                    }
                 }
             }
         }
@@ -265,12 +274,19 @@ pipeline {
         //======================================================================
         stage('Quality Gate') {
             when {
-                expression { !params.SKIP_SONAR }
+                expression { params.SKIP_SONAR == false }
             }
             steps {
                 echo '🚦 Checking Quality Gate...'
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    def scannerExists = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
+                    if (scannerExists) {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
+                    } else {
+                        echo '⚠️ Skipping Quality Gate - SonarQube Scanner not configured'
+                    }
                 }
             }
         }

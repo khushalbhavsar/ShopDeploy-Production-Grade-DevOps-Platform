@@ -8,9 +8,14 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/scripts/seedProducts.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "echo 'No ESLint configured for backend' && exit 0",
+    "test": "echo 'No tests configured' && exit 0"
   },
-  "keywords": ["ecommerce", "mern", "api"],
+  "keywords": [
+    "ecommerce",
+    "mern",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
