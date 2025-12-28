@@ -348,28 +348,50 @@ pipeline {
                 stage('Scan Backend Image') {
                     steps {
                         echo '🔒 Scanning backend image for vulnerabilities...'
-                        sh '''
-                            # Install trivy to local bin if not present
-                            export PATH="$WORKSPACE/bin:$PATH"
-                            if ! command -v trivy &> /dev/null; then
-                                mkdir -p "$WORKSPACE/bin"
-                                curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$WORKSPACE/bin"
-                            fi
-                            
-                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
-                                --format table shopdeploy-backend:${IMAGE_TAG} || true
-                        '''
+                        script {
+                            def scanResult = sh(script: '''
+                                export PATH="$WORKSPACE/bin:$PATH"
+                                
+                                # Check if trivy is already installed
+                                if ! command -v trivy &> /dev/null; then
+                                    echo "Installing Trivy..."
+                                    mkdir -p "$WORKSPACE/bin"
+                                    if ! curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$WORKSPACE/bin" 2>&1; then
+                                        echo "⚠️ Failed to install Trivy (possibly disk space issue). Skipping security scan."
+                                        exit 0
+                                    fi
+                                fi
+                                
+                                if command -v trivy &> /dev/null; then
+                                    trivy image --severity HIGH,CRITICAL --exit-code 0 --format table shopdeploy-backend:${IMAGE_TAG} || true
+                                else
+                                    echo "⚠️ Trivy not available. Skipping security scan."
+                                fi
+                            ''', returnStatus: true)
+                            if (scanResult != 0) {
+                                echo "⚠️ Security scan encountered issues but continuing..."
+                            }
+                        }
                     }
                 }
 
                 stage('Scan Frontend Image') {
                     steps {
                         echo '🔒 Scanning frontend image for vulnerabilities...'
-                        sh '''
-                            export PATH="$WORKSPACE/bin:$PATH"
-                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
-                                --format table shopdeploy-frontend:${IMAGE_TAG} || true
-                        '''
+                        script {
+                            def scanResult = sh(script: '''
+                                export PATH="$WORKSPACE/bin:$PATH"
+                                
+                                if command -v trivy &> /dev/null; then
+                                    trivy image --severity HIGH,CRITICAL --exit-code 0 --format table shopdeploy-frontend:${IMAGE_TAG} || true
+                                else
+                                    echo "⚠️ Trivy not available. Skipping security scan."
+                                fi
+                            ''', returnStatus: true)
+                            if (scanResult != 0) {
+                                echo "⚠️ Security scan encountered issues but continuing..."
+                            }
+                        }
                     }
                 }
             }
