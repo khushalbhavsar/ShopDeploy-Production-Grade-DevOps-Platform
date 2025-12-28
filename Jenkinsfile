@@ -55,12 +55,12 @@ pipeline {
         )
         booleanParam(
             name: 'SKIP_SONAR',
-            defaultValue: true,
-            description: 'Skip SonarQube analysis (set to false once SonarQube Scanner is installed on Jenkins)'
+            defaultValue: false,
+            description: 'Skip SonarQube analysis'
         )
         booleanParam(
             name: 'FORCE_DEPLOY',
-            defaultValue: false,
+            defaultValue: true,
             description: 'Force deployment even without code changes'
         )
         booleanParam(
