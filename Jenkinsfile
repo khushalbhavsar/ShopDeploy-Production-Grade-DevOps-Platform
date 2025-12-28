@@ -468,20 +468,16 @@ pipeline {
                             mv kubectl ${WORKSPACE}/bin/
                         fi
                         
-                        # Install helm if not present
-                        if [ ! -f ${WORKSPACE}/bin/helm ]; then
-                            echo "📥 Installing helm..."
-                            curl -fsSL -o /tmp/helm.tar.gz https://get.helm.sh/helm-v3.16.3-linux-amd64.tar.gz
-                            tar -zxf /tmp/helm.tar.gz -C /tmp
-                            mv /tmp/linux-amd64/helm ${WORKSPACE}/bin/
-                            rm -rf /tmp/linux-amd64 /tmp/helm.tar.gz
-                            chmod +x ${WORKSPACE}/bin/helm
+                        # Install helm using official script (recommended method)
+                        if ! command -v helm &> /dev/null && [ ! -f ${WORKSPACE}/bin/helm ]; then
+                            echo "📥 Installing Helm using official script..."
+                            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=${WORKSPACE}/bin USE_SUDO=false bash
                             echo "✅ Helm installed successfully"
                         fi
                         
                         # Verify helm
                         echo "📋 Helm version:"
-                        ${WORKSPACE}/bin/helm version --short
+                        helm version --short || ${WORKSPACE}/bin/helm version --short
                         
                         # Configure kubectl for EKS
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
@@ -585,20 +581,16 @@ pipeline {
                             mv kubectl ${WORKSPACE}/bin/
                         fi
                         
-                        # Install helm if not present
-                        if [ ! -f ${WORKSPACE}/bin/helm ]; then
-                            echo "📥 Installing helm..."
-                            curl -fsSL -o /tmp/helm.tar.gz https://get.helm.sh/helm-v3.16.3-linux-amd64.tar.gz
-                            tar -zxf /tmp/helm.tar.gz -C /tmp
-                            mv /tmp/linux-amd64/helm ${WORKSPACE}/bin/
-                            rm -rf /tmp/linux-amd64 /tmp/helm.tar.gz
-                            chmod +x ${WORKSPACE}/bin/helm
+                        # Install helm using official script (recommended method)
+                        if ! command -v helm &> /dev/null && [ ! -f ${WORKSPACE}/bin/helm ]; then
+                            echo "📥 Installing Helm using official script..."
+                            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=${WORKSPACE}/bin USE_SUDO=false bash
                             echo "✅ Helm installed successfully"
                         fi
                         
                         # Verify helm
                         echo "📋 Helm version:"
-                        ${WORKSPACE}/bin/helm version --short
+                        helm version --short || ${WORKSPACE}/bin/helm version --short
                         
                         # Configure kubectl for EKS
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
