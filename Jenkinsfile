@@ -58,7 +58,7 @@ pipeline {
         )
         booleanParam(
             name: 'SKIP_SONAR',
-            defaultValue: true,
+            defaultValue: false,
             description: 'Skip SonarQube analysis'
         )
         booleanParam(
