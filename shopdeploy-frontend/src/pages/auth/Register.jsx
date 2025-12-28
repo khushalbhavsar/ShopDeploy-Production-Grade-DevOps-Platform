@@ -39,7 +39,7 @@ const Register = () => {
     }
 
     try {
-      const { confirmPassword, ...registerData } = formData;
+      const { confirmPassword: _confirmPassword, ...registerData } = formData;
       await dispatch(register(registerData)).unwrap();
       toast.success('Registration successful!');
       navigate('/');

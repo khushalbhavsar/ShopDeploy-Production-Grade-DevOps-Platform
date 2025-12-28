@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { fetchOrderById, cancelOrder } from '../features/orders/orderSlice';
-import { formatPrice, formatDate, getStatusColor } from '../utils/helpers';
+import { formatPrice, formatDate } from '../utils/helpers';
 import toast from 'react-hot-toast';
 
 const OrderDetails = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const { currentOrder, isLoading } = useSelector((state) => state.orders);
   const [isCancelling, setIsCancelling] = useState(false);
 

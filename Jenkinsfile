@@ -4,7 +4,8 @@ pipeline {
     environment {
         // AWS Configuration
         AWS_REGION = 'us-east-1'
-        AWS_ACCOUNT_ID = 'aws-credentials'  // Replace with your AWS Account ID
+        // IMPORTANT: Set your 12-digit AWS Account ID below (e.g., '123456789012')
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
 
         // ECR Configuration
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"

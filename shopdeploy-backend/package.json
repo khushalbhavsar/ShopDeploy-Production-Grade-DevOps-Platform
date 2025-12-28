@@ -8,8 +8,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/scripts/seedProducts.js",
-    "lint": "echo 'No ESLint configured for backend' && exit 0",
-    "test": "echo 'No tests configured' && exit 0"
+    "lint": "echo 'No ESLint configured for backend'",
+    "test": "echo 'No tests configured'"
   },
   "keywords": [
     "ecommerce",
