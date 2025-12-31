@@ -545,16 +545,29 @@ sudo sysctl -w fs.file-max=131072
 echo "vm.max_map_count=524288" | sudo tee -a /etc/sysctl.conf
 echo "fs.file-max=131072" | sudo tee -a /etc/sysctl.conf
 
+# Pull the latest SonarQube LTS image (10.7+)
+docker pull sonarqube:10.7-community
+
 # Run SonarQube container
 docker run -d --name sonarqube \
+    --restart unless-stopped \
     -p 9000:9000 \
+    -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
     -v /opt/sonarqube/data:/opt/sonarqube/data \
     -v /opt/sonarqube/logs:/opt/sonarqube/logs \
     -v /opt/sonarqube/extensions:/opt/sonarqube/extensions \
-    sonarqube:lts-community
+    sonarqube:10.7-community
 
 # Verify container is running
 docker ps | grep sonarqube
+
+# Wait for SonarQube to start (takes 1-2 minutes)
+echo "Waiting for SonarQube to start..."
+until curl -s http://localhost:9000/api/system/status | grep -q '"status":"UP"'; do
+    sleep 10
+    echo "Still waiting..."
+done
+echo "SonarQube is ready!"
 
 # Check logs
 docker logs -f sonarqube
@@ -590,13 +603,13 @@ docker logs -f sonarqube
 ### 7.4 Install SonarQube Scanner
 
 ```bash
-# Download SonarQube Scanner
+# Download SonarQube Scanner (latest version 6.2)
 cd /opt
-sudo wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+sudo wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip
 
 # Unzip
-sudo unzip sonar-scanner-cli-5.0.1.3006-linux.zip
-sudo mv sonar-scanner-5.0.1.3006-linux sonar-scanner
+sudo unzip sonar-scanner-cli-6.2.1.4610-linux-x64.zip
+sudo mv sonar-scanner-6.2.1.4610-linux-x64 sonar-scanner
 
 # Add to PATH
 echo 'export PATH=$PATH:/opt/sonar-scanner/bin' | sudo tee -a /etc/profile.d/sonar-scanner.sh
@@ -604,6 +617,8 @@ source /etc/profile.d/sonar-scanner.sh
 
 # Verify installation
 sonar-scanner --version
+
+# Expected output: SonarScanner 6.2.1.4610
 ```
 
 ### 7.5 Configure SonarQube Quality Gates
@@ -726,10 +741,18 @@ sonar.sourceEncoding=UTF-8
 # Navigate to project directory
 cd ~/ShopDeploy
 
+# Set your SonarQube token (recommended: use environment variable)
+export SONAR_TOKEN="YOUR_SONARQUBE_TOKEN"
+
 # Run SonarQube analysis
 sonar-scanner \
     -Dsonar.host.url=http://localhost:9000 \
-    -Dsonar.login=YOUR_SONARQUBE_TOKEN
+    -Dsonar.token=$SONAR_TOKEN
+
+# Alternative: Run with inline token (not recommended for scripts)
+# sonar-scanner \
+#     -Dsonar.host.url=http://localhost:9000 \
+#     -Dsonar.token=YOUR_SONARQUBE_TOKEN
 
 # Check analysis results
 echo "Analysis complete! View results at http://<EC2-PUBLIC-IP>:9000/dashboard?id=shopdeploy"
@@ -745,14 +768,17 @@ version: "3.8"
 
 services:
   sonarqube:
-    image: sonarqube:lts-community
+    image: sonarqube:10.7-community
     container_name: sonarqube
+    restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
       SONAR_JDBC_USERNAME: sonar
       SONAR_JDBC_PASSWORD: sonar
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
     volumes:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_extensions:/opt/sonarqube/extensions
@@ -761,19 +787,28 @@ services:
       - "9000:9000"
     networks:
       - sonarnet
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
   db:
-    image: postgres:15
+    image: postgres:16-alpine
     container_name: sonarqube-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: sonar
       POSTGRES_PASSWORD: sonar
       POSTGRES_DB: sonar
     volumes:
-      - postgresql:/var/lib/postgresql
       - postgresql_data:/var/lib/postgresql/data
     networks:
       - sonarnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   sonarnet:
@@ -783,7 +818,6 @@ volumes:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
-  postgresql:
   postgresql_data:
 ```
 
