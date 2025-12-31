@@ -438,9 +438,6 @@ pipeline {
         // Stage 11: Deploy to Dev/Staging
         //======================================================================
         stage('Deploy to Dev/Staging') {
-            environment {
-                DEPLOY_ENV = "${params.ENVIRONMENT}"
-            }
             steps {
                 echo "🚀 Deploying to ${params.ENVIRONMENT} environment..."
                 withCredentials([[
@@ -549,9 +546,6 @@ pipeline {
         // Stage 13: Deploy to Production
         //======================================================================
         stage('Deploy to Production') {
-            when {
-                expression { params.ENVIRONMENT == 'prod' }
-            }
             steps {
                 echo '🚀 Deploying to PRODUCTION...'
                 withCredentials([[
@@ -682,9 +676,6 @@ pipeline {
         // Stage 15: Integration Tests
         //======================================================================
         stage('Integration Tests') {
-            when {
-                expression { params.ENVIRONMENT != 'prod' }
-            }
             steps {
                 echo '🧪 Running integration tests...'
                 script {
