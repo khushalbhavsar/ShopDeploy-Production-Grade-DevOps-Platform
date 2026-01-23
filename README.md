@@ -275,8 +275,6 @@ ShopDeploy/
   <img src="docs/Project_Flow_Diagram.png" alt="Project Flow Diagram" width="100%"/>
 </p>
 
-### System Architecture
-
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                           ShopDeploy Architecture                            │
