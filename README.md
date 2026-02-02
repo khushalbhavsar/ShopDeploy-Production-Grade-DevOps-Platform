@@ -292,6 +292,8 @@ ShopDeploy/
 
 ## 🏛️ Architecture
 
+![ShopDeploy Architecture](docs/ProjectFlow.png)
+
 ### High-Level System Architecture
 
 ```
