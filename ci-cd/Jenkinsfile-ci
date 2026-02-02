@@ -58,30 +58,6 @@ pipeline {
         )
         
         // ═══════════════════════════════════════════════════════════
-        // STAGE SKIP OPTIONS (Select which stages to skip)
-        // ═══════════════════════════════════════════════════════════
-        booleanParam(
-            name: 'SKIP_LINT',
-            defaultValue: false,
-            description: '📝 Skip Code Linting stage'
-        )
-        booleanParam(
-            name: 'SKIP_TESTS',
-            defaultValue: false,
-            description: '🧪 Skip Unit Tests stage (NOT allowed for prod)'
-        )
-        booleanParam(
-            name: 'SKIP_SONAR',
-            defaultValue: true,
-            description: '🔍 Skip SonarQube Analysis & Quality Gate (set false when configured)'
-        )
-        booleanParam(
-            name: 'SKIP_SECURITY_SCAN',
-            defaultValue: false,
-            description: '🔒 Skip Trivy Security Scan stage'
-        )
-        
-        // ═══════════════════════════════════════════════════════════
         // CD TRIGGER OPTIONS
         // ═══════════════════════════════════════════════════════════
         booleanParam(
@@ -232,12 +208,9 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 5: Code Linting (Skip if SKIP_LINT=true)
+        // Stage 5: Code Linting
         //======================================================================
         stage('Code Linting') {
-            when {
-                expression { !params.SKIP_LINT }
-            }
             parallel {
                 stage('Backend Lint') {
                     steps {
@@ -260,12 +233,9 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 6: Unit Tests (Skip if SKIP_TESTS=true)
+        // Stage 6: Unit Tests
         //======================================================================
         stage('Unit Tests') {
-            when {
-                expression { !params.SKIP_TESTS }
-            }
             parallel {
                 stage('Backend Tests') {
                     steps {
@@ -301,9 +271,6 @@ pipeline {
         // Stage 7: Verify Coverage Reports Exist
         //======================================================================
         stage('Verify Coverage') {
-            when {
-                expression { !params.SKIP_TESTS }
-            }
             parallel {
                 stage('Verify Backend Coverage') {
                     steps {
@@ -345,12 +312,9 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 8: SonarQube Analysis (Skips if SKIP_SONAR=true)
+        // Stage 8: SonarQube Analysis
         //======================================================================
         stage('SonarQube Analysis') {
-            when {
-                expression { !params.SKIP_SONAR }
-            }
             steps {
                 script {
                     echo "═══════════════════════════════════════════════════════════"
@@ -408,12 +372,9 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 9: Quality Gate (Skips if SKIP_SONAR=true)
+        // Stage 9: Quality Gate
         //======================================================================
         stage('Quality Gate') {
-            when {
-                expression { !params.SKIP_SONAR }
-            }
             steps {
                 echo 'Waiting for SonarQube Quality Gate...'
                 timeout(time: 10, unit: 'MINUTES') {
@@ -490,12 +451,9 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 11: Security Scan (Skip if SKIP_SECURITY_SCAN=true)
+        // Stage 11: Security Scan
         //======================================================================
         stage('Security Scan') {
-            when {
-                expression { !params.SKIP_SECURITY_SCAN }
-            }
             parallel {
                 stage('Scan Backend Image') {
                     steps {
