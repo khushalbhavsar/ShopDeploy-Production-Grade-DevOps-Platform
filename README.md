@@ -241,7 +241,8 @@ ShopDeploy/
 │   ├── HELM-SETUP-GUIDE.md
 │   ├── JENKINS-SETUP-GUIDE.md
 │   ├── MONITORING-SETUP-GUIDE.md
-│   └── DEVOPS-INTERVIEW-QUESTIONS.md
+│   ├── DEVOPS-INTERVIEW-QUESTIONS.md
+│   └── Project_Flow_Diagram.png    # Architecture diagram
 │
 ├── 📂 monitoring/                  # Observability stack
 │   ├── prometheus-values.yaml      # Prometheus Helm values
@@ -279,24 +280,122 @@ ShopDeploy/
 │   │   └── install-monitoring.ps1
 │   └── test.sh                     # Run tests
 │
-├── 📄 VERSION                      # 🔥 Semantic version (1.0.0)
 ├── 📄 docker-compose.yml           # Local development setup
 ├── 📄 .env.example                 # Environment template
+├── 📄 .env                         # Environment variables (gitignored)
+├── 📄 .gitattributes               # Git attributes
 ├── 📄 .gitignore                   # Git ignore rules
 └── 📄 README.md                    # This file
 ```
 
 ---
 
-
 ## 🏛️ Architecture
 
-### Project Flow Diagram
+### High-Level System Architecture
 
-<p align="center">
-  <img src="docs/Project_Flow_Diagram.png" alt="Project Flow Diagram" width="100%"/>
-</p>
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              ShopDeploy Architecture                                │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│  ┌─────────────┐     ┌─────────────────────────────────────────────────────────┐   │
+│  │   Users     │     │                    AWS Cloud                            │   │
+│  │  (Browser)  │     │  ┌─────────────────────────────────────────────────┐   │   │
+│  └──────┬──────┘     │  │              Amazon EKS Cluster                 │   │   │
+│         │            │  │  ┌─────────────────┐  ┌─────────────────────┐   │   │   │
+│         ▼            │  │  │   Frontend      │  │     Backend         │   │   │   │
+│  ┌──────────────┐    │  │  │   (React)       │  │   (Node.js/Express) │   │   │   │
+│  │   Route 53   │────┼──│  │   - Nginx       │  │   - REST API        │   │   │   │
+│  │   (DNS)      │    │  │  │   - Static      │  │   - JWT Auth        │   │   │   │
+│  └──────────────┘    │  │  │     Assets      │  │   - Business Logic  │   │   │   │
+│         │            │  │  └────────┬────────┘  └──────────┬──────────┘   │   │   │
+│         ▼            │  │           │                      │              │   │   │
+│  ┌──────────────┐    │  │           │    ┌─────────────────┘              │   │   │
+│  │     ALB      │────┼──│           │    │                                │   │   │
+│  │  (Ingress)   │    │  │           ▼    ▼                                │   │   │
+│  └──────────────┘    │  │  ┌─────────────────────────────────────────┐   │   │   │
+│                      │  │  │          Kubernetes Services            │   │   │   │
+│                      │  │  │  - HPA (Auto Scaling)                   │   │   │   │
+│                      │  │  │  - ConfigMaps / Secrets                 │   │   │   │
+│                      │  │  │  - Network Policies                     │   │   │   │
+│                      │  │  └─────────────────────────────────────────┘   │   │   │
+│                      │  └─────────────────────────────────────────────────┘   │   │
+│                      │                           │                            │   │
+│                      │                           ▼                            │   │
+│                      │  ┌─────────────────────────────────────────────────┐   │   │
+│                      │  │               Data Layer                        │   │   │
+│                      │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────┐  │   │   │
+│                      │  │  │  MongoDB    │  │ Cloudinary  │  │ Stripe  │  │   │   │
+│                      │  │  │ (Database)  │  │  (Images)   │  │(Payment)│  │   │   │
+│                      │  │  └─────────────┘  └─────────────┘  └─────────┘  │   │   │
+│                      │  └─────────────────────────────────────────────────┘   │   │
+│                      └─────────────────────────────────────────────────────────┘   │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
+### CI/CD Pipeline Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                           CI/CD Pipeline Architecture                                │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│   Developer          CI Pipeline                    CD Pipeline                      │
+│   ─────────          ───────────                    ───────────                      │
+│                                                                                      │
+│   ┌───────┐         ┌───────────────┐              ┌───────────────┐                │
+│   │  Git  │────────▶│   Jenkins     │─────────────▶│   Jenkins     │                │
+│   │ Push  │         │   (CI Job)    │  IMAGE_TAG   │   (CD Job)    │                │
+│   └───────┘         └───────┬───────┘              └───────┬───────┘                │
+│                             │                              │                        │
+│                             ▼                              ▼                        │
+│                     ┌───────────────┐              ┌───────────────┐                │
+│                     │ Build & Test  │              │ Deploy (Helm) │                │
+│                     ├───────────────┤              ├───────────────┤                │
+│                     │ • npm install │              │ • Dev         │                │
+│                     │ • npm test    │              │ • Staging     │                │
+│                     │ • ESLint      │              │ • Production  │                │
+│                     │ • SonarQube   │              │   (Approval)  │                │
+│                     └───────┬───────┘              └───────┬───────┘                │
+│                             │                              │                        │
+│                             ▼                              ▼                        │
+│                     ┌───────────────┐              ┌───────────────┐                │
+│                     │ Docker Build  │              │ Smoke Tests   │                │
+│                     │ + Trivy Scan  │              │ + Rollback    │                │
+│                     └───────┬───────┘              └───────────────┘                │
+│                             │                                                       │
+│                             ▼                                                       │
+│                     ┌───────────────┐                                               │
+│                     │   AWS ECR     │                                               │
+│                     │ (Push Image)  │                                               │
+│                     └───────────────┘                                               │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Infrastructure Components
+
+| Layer | Component | Technology | Purpose |
+|-------|-----------|------------|----------|
+| **Frontend** | Web App | React + Vite | User interface, SPA |
+| **Frontend** | Web Server | Nginx | Static file serving, reverse proxy |
+| **Backend** | API Server | Node.js + Express | REST API, business logic |
+| **Backend** | Authentication | JWT | Secure user authentication |
+| **Database** | Primary DB | MongoDB | Data persistence |
+| **Storage** | Images | Cloudinary | Product image storage |
+| **Payments** | Gateway | Stripe | Payment processing |
+| **Container** | Registry | AWS ECR | Docker image storage |
+| **Orchestration** | Cluster | AWS EKS | Kubernetes management |
+| **Infrastructure** | IaC | Terraform | Infrastructure provisioning |
+| **CI/CD** | Pipeline | Jenkins | Build, test, deploy automation |
+| **Monitoring** | Metrics | Prometheus | Metrics collection |
+| **Monitoring** | Dashboards | Grafana | Visualization |
+
+> 📊 See [docs/Project_Flow_Diagram.png](docs/Project_Flow_Diagram.png) for visual architecture diagram.
+
+---
 
 ## �️ Amazon Linux Setup (Quick Start)
 
@@ -319,7 +418,7 @@ ssh -i "your-key.pem" ec2-user@<EC2-PUBLIC-IP>
 
 # 2. Clone the repository
 git clone https://github.com/yourusername/ShopDeploy.git
-cd ShopDeploy/scripts
+cd ShopDeploy/scripts/infra
 
 # 3. Run the complete bootstrap script
 chmod +x *.sh
@@ -352,14 +451,21 @@ sudo ./ec2-bootstrap.sh
 # Install tools individually if needed
 cd scripts
 
-./install-docker.sh              # Docker + Docker Compose
-./install-jenkins.sh             # Jenkins + Java 21 + Maven
-./install-sonarqube.sh           # SonarQube + PostgreSQL 15
-./install-grafana-prometheus.sh  # Grafana + Prometheus + Node Exporter
-./install-terraform.sh           # Terraform
-./install-kubectl.sh             # kubectl + autocompletion
-./install-helm.sh                # Helm + common repositories
-./install-awscli.sh              # AWS CLI v2 + eksctl
+# Infrastructure tools
+./infra/install-terraform.sh           # Terraform
+./infra/install-awscli.sh              # AWS CLI v2 + eksctl
+
+# Docker tools
+./docker/install-docker.sh             # Docker + Docker Compose
+
+# Kubernetes tools
+./kubernetes/install-kubectl.sh        # kubectl + autocompletion
+./kubernetes/install-helm.sh           # Helm + common repositories
+
+# Monitoring & CI tools
+./monitoring/install-jenkins.sh        # Jenkins + Java 21 + Maven
+./monitoring/install-sonarqube.sh      # SonarQube + PostgreSQL 15
+./monitoring/install-grafana-prometheus.sh  # Grafana + Prometheus + Node Exporter
 ```
 
 ### Post-Installation
@@ -758,19 +864,6 @@ kubectl port-forward svc/prometheus-server 9090:80 -n monitoring
 - Node Metrics
 - Pod Metrics
 - ShopDeploy Application Dashboard
-
-### Monitoring Setup
-
-```bash
-# Install monitoring stack
-./monitoring/install-monitoring.sh
-
-# Access Grafana
-kubectl port-forward svc/grafana 3000:80 -n monitoring
-
-# Access Prometheus
-kubectl port-forward svc/prometheus-server 9090:80 -n monitoring
-```
 
 ---
 
