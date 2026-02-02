@@ -209,49 +209,35 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 6: SonarQube Analysis
+        // Stage 6: Verify Coverage Reports Exist
         //======================================================================
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    echo 'Running SonarQube analysis...'
-                    
-                    // Try Jenkins SonarQube Scanner plugin first (recommended)
-                    try {
-                        withSonarQubeEnv('SonarQube') {
-                            // Use Jenkins SonarQube Scanner tool if configured
-                            def scannerHome = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                    -Dsonar.projectName=ShopDeploy \
-                                    -Dsonar.sources=shopdeploy-backend/src,shopdeploy-frontend/src \
-                                    -Dsonar.exclusions=**/node_modules/**,**/test/**,**/coverage/**,**/*.spec.js,**/dist/** \
-                                    -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info \
-                                    -Dsonar.qualitygate.wait=true
-                            """
+        stage('Verify Coverage') {
+            parallel {
+                stage('Verify Backend Coverage') {
+                    steps {
+                        dir("${BACKEND_DIR}") {
+                            sh '''
+                                if [ ! -f coverage/lcov.info ]; then
+                                    echo "❌ Backend coverage report missing!"
+                                    echo "Ensure tests ran with --coverage flag"
+                                    exit 1
+                                fi
+                                echo "✅ Backend coverage report found"
+                            '''
                         }
-                    } catch (Exception e) {
-                        echo "SonarQube Scanner plugin not configured: ${e.message}"
-                        
-                        // Fallback: Check if sonar-scanner CLI is available
-                        def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
-                        if (scannerAvailable) {
-                            withSonarQubeEnv('SonarQube') {
-                                sh """
-                                    sonar-scanner \
-                                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                        -Dsonar.projectName=ShopDeploy \
-                                        -Dsonar.sources=shopdeploy-backend/src,shopdeploy-frontend/src \
-                                        -Dsonar.exclusions=**/node_modules/**,**/test/**,**/coverage/**,**/*.spec.js,**/dist/** \
-                                        -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info
-                                """
-                            }
-                        } else {
-                            echo 'SonarQube Scanner not configured. To enable:'
-                            echo '1. Install SonarQube Scanner plugin in Jenkins'
-                            echo '2. Configure SonarQube server in Jenkins > Manage Jenkins > Configure System'
-                            echo '3. Add SonarQube Scanner tool in Jenkins > Global Tool Configuration'
+                    }
+                }
+                stage('Verify Frontend Coverage') {
+                    steps {
+                        dir("${FRONTEND_DIR}") {
+                            sh '''
+                                if [ ! -f coverage/lcov.info ]; then
+                                    echo "❌ Frontend coverage report missing!"
+                                    echo "Ensure tests ran with --coverage flag"
+                                    exit 1
+                                fi
+                                echo "✅ Frontend coverage report found"
+                            '''
                         }
                     }
                 }
@@ -259,26 +245,73 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 7: Quality Gate
+        // Stage 7: SonarQube Analysis (Parallel - Separate Projects)
+        //======================================================================
+        stage('SonarQube Analysis') {
+            parallel {
+                stage('Backend Sonar Scan') {
+                    steps {
+                        script {
+                            def scannerHome = tool 'sonar-scanner'
+                            
+                            withSonarQubeEnv('SonarQube') {
+                                dir("${BACKEND_DIR}") {
+                                    sh """
+                                        ${scannerHome}/bin/sonar-scanner \
+                                            -Dsonar.projectKey=shopdeploy-backend \
+                                            -Dsonar.projectName="ShopDeploy Backend" \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.tests=tests \
+                                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                                            -Dsonar.exclusions=**/node_modules/**,**/coverage/** \
+                                            -Dsonar.sourceEncoding=UTF-8 \
+                                            -Dsonar.branch.name=${env.BRANCH_NAME ?: 'main'}
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+
+                stage('Frontend Sonar Scan') {
+                    steps {
+                        script {
+                            def scannerHome = tool 'sonar-scanner'
+                            
+                            withSonarQubeEnv('SonarQube') {
+                                dir("${FRONTEND_DIR}") {
+                                    sh """
+                                        ${scannerHome}/bin/sonar-scanner \
+                                            -Dsonar.projectKey=shopdeploy-frontend \
+                                            -Dsonar.projectName="ShopDeploy Frontend" \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                                            -Dsonar.exclusions=**/node_modules/**,**/dist/** \
+                                            -Dsonar.sourceEncoding=UTF-8 \
+                                            -Dsonar.branch.name=${env.BRANCH_NAME ?: 'main'}
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //======================================================================
+        // Stage 8: Quality Gate (Strict - No Bypass)
         //======================================================================
         stage('Quality Gate') {
             steps {
-                script {
-                    echo 'Checking Quality Gate...'
-                    def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
-                    if (scannerAvailable) {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
-                        }
-                    } else {
-                        echo 'Skipping Quality Gate (SonarQube Scanner not available)'
-                    }
+                echo 'Waiting for SonarQube Quality Gate...'
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
         //======================================================================
-        // Stage 8: Build Docker Images
+        // Stage 9: Build Docker Images
         //======================================================================
         stage('Build Docker Images') {
             parallel {
@@ -350,7 +383,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 9: Security Scan (Trivy)
+        // Stage 10: Security Scan (Trivy)
         //======================================================================
         stage('Security Scan') {
             parallel {
@@ -383,7 +416,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 10: Push to ECR
+        // Stage 11: Push to ECR
         //======================================================================
         stage('Push to ECR') {
             steps {
@@ -422,7 +455,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 11: Save Image Tag
+        // Stage 12: Save Image Tag
         //======================================================================
         stage('Save Image Tag') {
             steps {
@@ -472,7 +505,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 12: Cleanup
+        // Stage 13: Cleanup
         //======================================================================
         stage('Cleanup') {
             steps {
