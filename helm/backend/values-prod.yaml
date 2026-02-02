@@ -62,7 +62,7 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health/health
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/certificate-arn: ""  # Add your ACM certificate ARN
   hosts:
@@ -120,10 +120,11 @@ tolerations: []
 
 #------------------------------------------------------------------------------
 # Probes - Production configuration
+# Health endpoints: /api/health/health (liveness), /api/health/ready (readiness)
 #------------------------------------------------------------------------------
 livenessProbe:
   httpGet:
-    path: /api/health
+    path: /api/health/health
     port: 5000
   initialDelaySeconds: 30
   periodSeconds: 10
@@ -133,13 +134,22 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /api/health
+    path: /api/health/ready
     port: 5000
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3
   failureThreshold: 3
   successThreshold: 1
+
+startupProbe:
+  httpGet:
+    path: /api/health/health
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
 
 #------------------------------------------------------------------------------
 # Security Context

@@ -58,7 +58,7 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health/health
   hosts:
     - host: api-staging.shopdeploy.example.com
       paths:
@@ -74,16 +74,32 @@ podDisruptionBudget:
 
 #------------------------------------------------------------------------------
 # Probes - Standard configuration
+# Health endpoints: /api/health/health (liveness), /api/health/ready (readiness)
 #------------------------------------------------------------------------------
 livenessProbe:
+  httpGet:
+    path: /api/health/health
+    port: 5000
   initialDelaySeconds: 45
   periodSeconds: 15
   failureThreshold: 3
 
 readinessProbe:
+  httpGet:
+    path: /api/health/ready
+    port: 5000
   initialDelaySeconds: 10
   periodSeconds: 5
   failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /api/health/health
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
 
 #------------------------------------------------------------------------------
 # ConfigMap Data
