@@ -40,7 +40,7 @@ pipeline {
     }
 
     tools {
-        nodejs '-'
+        nodejs 'NodeJS-18'
     }
 
     options {
@@ -550,14 +550,16 @@ pipeline {
         unstable {
             echo '⚠️ CI Pipeline completed with warnings (unstable)'
             // Slack notification (optional - skip if not configured)
-            try {
-                slackSend(
-                    channel: '#deployments',
-                    color: 'warning',
-                    message: "⚠️ CI Build Unstable | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
-                )
-            } catch (Exception e) {
-                echo "⚠️ Slack notification skipped (not configured)"
+            script {
+                try {
+                    slackSend(
+                        channel: '#deployments',
+                        color: 'warning',
+                        message: "⚠️ CI Build Unstable | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Slack notification skipped (not configured)"
+                }
             }
         }
 
