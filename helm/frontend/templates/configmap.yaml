@@ -1,0 +1,17 @@
+{{- if .Values.configMapRef.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configMapRef.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "frontend.labels" . | nindent 4 }}
+data:
+  {{- if .Values.config }}
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- else }}
+  VITE_API_URL: {{ .Values.apiUrl | default "http://shopdeploy-backend:5000/api" | quote }}
+  {{- end }}
+{{- end }}
