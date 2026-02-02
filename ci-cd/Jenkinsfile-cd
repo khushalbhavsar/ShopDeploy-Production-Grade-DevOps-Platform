@@ -367,8 +367,6 @@ pipeline {
                      secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
                 ]) {
                     script {
-                        // FIX 6: Use --atomic for auto-rollback on failure
-                        def helmArgs = params.DRY_RUN ? '--dry-run' : '--atomic'
                         def valuesFile = "values-${params.ENVIRONMENT}.yaml"
                         
                         sh """
@@ -377,33 +375,82 @@ pipeline {
                             
                             # Create namespace if not exists
                             kubectl create namespace ${env.K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-                            
-                            # Deploy backend with --atomic (auto-rollback on failure)
-                            echo "📦 Deploying backend..."
-                            helm upgrade --install shopdeploy-backend ./helm/backend \
-                                --namespace ${env.K8S_NAMESPACE} \
-                                --values ./helm/backend/${valuesFile} \
-                                --set image.repository=${env.ECR_REGISTRY}/${ECR_BACKEND_REPO} \
-                                --set image.tag=${env.DEPLOY_IMAGE_TAG} \
-                                --set global.environment=${params.ENVIRONMENT} \
-                                --wait \
-                                --timeout 10m \
-                                ${helmArgs}
-                            
-                            # Deploy frontend with --atomic (auto-rollback on failure)
-                            echo "🎨 Deploying frontend..."
-                            helm upgrade --install shopdeploy-frontend ./helm/frontend \
-                                --namespace ${env.K8S_NAMESPACE} \
-                                --values ./helm/frontend/${valuesFile} \
-                                --set image.repository=${env.ECR_REGISTRY}/${ECR_FRONTEND_REPO} \
-                                --set image.tag=${env.DEPLOY_IMAGE_TAG} \
-                                --set global.environment=${params.ENVIRONMENT} \
-                                --wait \
-                                --timeout 10m \
-                                ${helmArgs}
-                            
-                            echo "✅ Deployment completed"
                         """
+                        
+                        // Deploy backend
+                        echo "📦 Deploying backend..."
+                        def backendResult = sh(
+                            script: """
+                                helm upgrade --install shopdeploy-backend ./helm/backend \
+                                    --namespace ${env.K8S_NAMESPACE} \
+                                    --values ./helm/backend/${valuesFile} \
+                                    --set image.repository=${env.ECR_REGISTRY}/${ECR_BACKEND_REPO} \
+                                    --set image.tag=${env.DEPLOY_IMAGE_TAG} \
+                                    --set global.environment=${params.ENVIRONMENT} \
+                                    --wait \
+                                    --timeout 5m \
+                                    ${params.DRY_RUN ? '--dry-run' : ''}
+                            """,
+                            returnStatus: true
+                        )
+                        
+                        if (backendResult != 0) {
+                            echo "❌ Backend deployment failed. Gathering diagnostics..."
+                            sh """
+                                echo "=== POD STATUS ==="
+                                kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-backend -o wide || true
+                                
+                                echo "=== POD EVENTS ==="
+                                kubectl get events -n ${env.K8S_NAMESPACE} --sort-by='.lastTimestamp' | tail -30 || true
+                                
+                                echo "=== POD DESCRIBE ==="
+                                kubectl describe pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-backend || true
+                                
+                                echo "=== POD LOGS ==="
+                                kubectl logs -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-backend --tail=100 || true
+                                
+                                echo "=== HELM STATUS ==="
+                                helm status shopdeploy-backend -n ${env.K8S_NAMESPACE} || true
+                            """
+                            error("Backend deployment failed - see diagnostics above")
+                        }
+                        
+                        // Deploy frontend
+                        echo "🎨 Deploying frontend..."
+                        def frontendResult = sh(
+                            script: """
+                                helm upgrade --install shopdeploy-frontend ./helm/frontend \
+                                    --namespace ${env.K8S_NAMESPACE} \
+                                    --values ./helm/frontend/${valuesFile} \
+                                    --set image.repository=${env.ECR_REGISTRY}/${ECR_FRONTEND_REPO} \
+                                    --set image.tag=${env.DEPLOY_IMAGE_TAG} \
+                                    --set global.environment=${params.ENVIRONMENT} \
+                                    --wait \
+                                    --timeout 5m \
+                                    ${params.DRY_RUN ? '--dry-run' : ''}
+                            """,
+                            returnStatus: true
+                        )
+                        
+                        if (frontendResult != 0) {
+                            echo "❌ Frontend deployment failed. Gathering diagnostics..."
+                            sh """
+                                echo "=== POD STATUS ==="
+                                kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-frontend -o wide || true
+                                
+                                echo "=== POD EVENTS ==="
+                                kubectl get events -n ${env.K8S_NAMESPACE} --sort-by='.lastTimestamp' | tail -30 || true
+                                
+                                echo "=== POD DESCRIBE ==="
+                                kubectl describe pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-frontend || true
+                                
+                                echo "=== POD LOGS ==="
+                                kubectl logs -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-frontend --tail=100 || true
+                            """
+                            error("Frontend deployment failed - see diagnostics above")
+                        }
+                        
+                        echo "✅ Deployment completed"
                     }
                 }
             }
