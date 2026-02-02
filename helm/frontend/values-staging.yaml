@@ -39,11 +39,12 @@ env:
   VITE_API_URL: "https://api-staging.shopdeploy.example.com"
 
 #------------------------------------------------------------------------------
-# Service Configuration
+# Service Configuration (nginx-unprivileged listens on 8080)
 #------------------------------------------------------------------------------
 service:
   type: ClusterIP
   port: 80
+  targetPort: 8080
 
 #------------------------------------------------------------------------------
 # Ingress Configuration

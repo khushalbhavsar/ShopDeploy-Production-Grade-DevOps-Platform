@@ -36,12 +36,12 @@ env:
   VITE_API_URL: "http://shopdeploy-backend:5000"
 
 #------------------------------------------------------------------------------
-# Service Configuration
+# Service Configuration (nginx-unprivileged listens on 8080)
 #------------------------------------------------------------------------------
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
+  targetPort: 8080
 
 #------------------------------------------------------------------------------
 # Ingress - Disabled for development
@@ -65,12 +65,12 @@ secretRef:
   enabled: false
 
 #------------------------------------------------------------------------------
-# Probes - Fast for Nginx (serves static files)
+# Probes - Fast for Nginx (nginx-unprivileged on port 8080)
 #------------------------------------------------------------------------------
 livenessProbe:
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 5
@@ -79,7 +79,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 3

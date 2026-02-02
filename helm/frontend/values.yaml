@@ -38,7 +38,7 @@ serviceAccount:
 #------------------------------------------------------------------------------
 podAnnotations:
   prometheus.io/scrape: "true"
-  prometheus.io/port: "80"
+  prometheus.io/port: "8080"
 
 podSecurityContext: {}
 
@@ -46,11 +46,12 @@ securityContext: {}
 
 #------------------------------------------------------------------------------
 # Service Configuration
+# Note: nginx-unprivileged listens on port 8080 internally
 #------------------------------------------------------------------------------
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
+  targetPort: 8080
   annotations: {}
 
 #------------------------------------------------------------------------------
@@ -97,12 +98,12 @@ autoscaling:
   targetCPUUtilizationPercentage: 70
 
 #------------------------------------------------------------------------------
-# Health Probes
+# Health Probes (nginx-unprivileged listens on 8080)
 #------------------------------------------------------------------------------
 livenessProbe:
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
@@ -111,7 +112,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3

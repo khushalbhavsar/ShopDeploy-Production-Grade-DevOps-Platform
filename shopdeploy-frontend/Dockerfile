@@ -19,35 +19,22 @@ COPY . .
 # Build the application with environment variables
 RUN npm run build
 
-# Production stage - using nginx to serve static files
-FROM nginx:alpine
+# Production stage - using nginx-unprivileged for non-root execution
+# This image is specifically designed to run as non-root user (UID 101)
+FROM nginxinc/nginx-unprivileged:alpine
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
-
-# Create non-root user for nginx
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001 -G appgroup
-
-# Copy custom nginx configuration
+# Copy custom nginx configuration (must listen on 8080 for unprivileged)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Set proper permissions
-RUN chown -R appuser:appgroup /usr/share/nginx/html && \
-    chown -R appuser:appgroup /var/cache/nginx && \
-    chown -R appuser:appgroup /var/log/nginx && \
-    touch /var/run/nginx.pid && \
-    chown -R appuser:appgroup /var/run/nginx.pid
+# nginx-unprivileged runs on port 8080 by default
+EXPOSE 8080
 
-# Expose port
-EXPOSE 80
-
-# Health check
+# Health check using port 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
 
-# Start nginx
+# Start nginx (runs as non-root user 101)
 CMD ["nginx", "-g", "daemon off;"]
