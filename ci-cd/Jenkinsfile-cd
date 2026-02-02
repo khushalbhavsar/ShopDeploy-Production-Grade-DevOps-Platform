@@ -113,9 +113,9 @@ pipeline {
                         withCredentials([
                             string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID'),
                             [$class: 'AmazonWebServicesCredentialsBinding',
-                             credentialsId: 'aws-credentials',
-                             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                            credentialsId: 'aws-credentials',
+                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
                         ]) {
                             env.DEPLOY_IMAGE_TAG = sh(
                                 script: '''
@@ -174,20 +174,16 @@ pipeline {
                     echo "Docker:"
                     docker --version
                     
-                    echo "
-AWS CLI:"
+                    echo "AWS CLI:"
                     aws --version
                     
-                    echo "
-kubectl:"
+                    echo "kubectl:"
                     kubectl version --client || echo "kubectl not available"
                     
-                    echo "
-Helm:"
+                    echo "Helm:"
                     helm version --short || echo "Helm not available"
                     
-                    echo "
-Tool verification complete"
+                    echo "Tool verification complete"
                 '''
             }
         }
