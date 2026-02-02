@@ -48,25 +48,46 @@ pipeline {
     }
 
     parameters {
+        // ═══════════════════════════════════════════════════════════
+        // ENVIRONMENT SELECTION
+        // ═══════════════════════════════════════════════════════════
         choice(
             name: 'TARGET_ENVIRONMENT',
             choices: ['dev', 'staging', 'prod'],
             description: '🌍 Select deployment environment (REQUIRED)'
         )
+        
+        // ═══════════════════════════════════════════════════════════
+        // STAGE SKIP OPTIONS (Select which stages to skip)
+        // ═══════════════════════════════════════════════════════════
         booleanParam(
-            name: 'TRIGGER_CD',
-            defaultValue: true,
-            description: '🚀 Trigger CD pipeline after successful build'
+            name: 'SKIP_LINT',
+            defaultValue: false,
+            description: '📝 Skip Code Linting stage'
         )
         booleanParam(
             name: 'SKIP_TESTS',
             defaultValue: false,
-            description: '⚡ Skip tests (NOT recommended for prod)'
+            description: '🧪 Skip Unit Tests stage (NOT allowed for prod)'
         )
         booleanParam(
             name: 'SKIP_SONAR',
             defaultValue: true,
-            description: '🔍 Skip SonarQube analysis (set to false when SonarQube is configured)'
+            description: '🔍 Skip SonarQube Analysis & Quality Gate (set false when configured)'
+        )
+        booleanParam(
+            name: 'SKIP_SECURITY_SCAN',
+            defaultValue: false,
+            description: '🔒 Skip Trivy Security Scan stage'
+        )
+        
+        // ═══════════════════════════════════════════════════════════
+        // CD TRIGGER OPTIONS
+        // ═══════════════════════════════════════════════════════════
+        booleanParam(
+            name: 'TRIGGER_CD',
+            defaultValue: true,
+            description: '🚀 Trigger CD pipeline after successful build'
         )
     }
 
@@ -112,9 +133,16 @@ pipeline {
                         error("❌ Cannot skip tests for PRODUCTION deployment!")
                     }
                     
+                    // Display stage skip configuration
+                    echo ""
+                    echo "🛠️  STAGE CONFIGURATION:"
+                    echo "    ├─ Skip Lint:          ${params.SKIP_LINT ? '✅ YES' : '❌ NO'}"
+                    echo "    ├─ Skip Tests:         ${params.SKIP_TESTS ? '✅ YES' : '❌ NO'}"
+                    echo "    ├─ Skip SonarQube:     ${params.SKIP_SONAR ? '✅ YES' : '❌ NO'}"
+                    echo "    ├─ Skip Security Scan: ${params.SKIP_SECURITY_SCAN ? '✅ YES' : '❌ NO'}"
+                    echo "    └─ Trigger CD:         ${params.TRIGGER_CD ? '✅ YES' : '❌ NO'}"
+                    echo ""
                     echo "API URL: ${env.API_URL}"
-                    echo "Trigger CD: ${params.TRIGGER_CD}"
-                    echo "Skip SonarQube: ${params.SKIP_SONAR}"
                     echo "═══════════════════════════════════════════════════════════"
                 }
             }
@@ -204,9 +232,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 5: Code Linting
+        // Stage 5: Code Linting (Skip if SKIP_LINT=true)
         //======================================================================
         stage('Code Linting') {
+            when {
+                expression { !params.SKIP_LINT }
+            }
             parallel {
                 stage('Backend Lint') {
                     steps {
@@ -459,9 +490,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 11: Security Scan (Trivy)
+        // Stage 11: Security Scan (Skip if SKIP_SECURITY_SCAN=true)
         //======================================================================
         stage('Security Scan') {
+            when {
+                expression { !params.SKIP_SECURITY_SCAN }
+            }
             parallel {
                 stage('Scan Backend Image') {
                     steps {
