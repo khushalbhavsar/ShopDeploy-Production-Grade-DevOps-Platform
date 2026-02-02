@@ -312,7 +312,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 8: SonarQube Analysis
+        // Stage 8: SonarQube Analysis (Skips if not configured)
         //======================================================================
         stage('SonarQube Analysis') {
             steps {
@@ -321,8 +321,20 @@ pipeline {
                     echo "🔍 SONARQUBE CODE ANALYSIS"
                     echo "═══════════════════════════════════════════════════════════"
                     
-                    // Get SonarQube Scanner tool - will fail if not configured
-                    def scannerHome = tool 'sonar-scanner'
+                    // Try to get SonarQube Scanner tool - skip gracefully if not configured
+                    def scannerHome = null
+                    try {
+                        scannerHome = tool 'sonar-scanner'
+                    } catch (Exception e) {
+                        echo "⚠️ SonarQube Scanner tool not configured in Jenkins"
+                        echo "To enable SonarQube analysis:"
+                        echo "  1. Install SonarQube Scanner plugin"
+                        echo "  2. Go to: Manage Jenkins → Global Tool Configuration"
+                        echo "  3. Add SonarQube Scanner with name 'sonar-scanner'"
+                        echo "Skipping SonarQube analysis..."
+                        env.SONAR_SKIPPED = 'true'
+                        return
+                    }
                     
                     // Run Backend Scan
                     def backendCoverageFlag = ''
@@ -372,13 +384,19 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 9: Quality Gate
+        // Stage 9: Quality Gate (Skips if SonarQube was skipped)
         //======================================================================
         stage('Quality Gate') {
             steps {
-                echo 'Waiting for SonarQube Quality Gate...'
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    if (env.SONAR_SKIPPED == 'true') {
+                        echo "⚠️ Skipping Quality Gate - SonarQube was not configured"
+                        return
+                    }
+                    echo 'Waiting for SonarQube Quality Gate...'
+                    timeout(time: 10, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: true
+                    }
                 }
             }
         }
