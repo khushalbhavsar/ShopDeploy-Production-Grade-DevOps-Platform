@@ -212,54 +212,55 @@ pipeline {
         // Stage 4: Production Approval
         //======================================================================
         stage('Production Approval') {
-            when {
-                expression { params.ENVIRONMENT == 'prod' && !params.DRY_RUN }
-            }
             steps {
                 script {
-                    echo '⏳ Waiting for production deployment approval...'
-                    
-                    def approvalMessage = """
-                    🚀 PRODUCTION DEPLOYMENT REQUEST
-                    ════════════════════════════════════════
-                    Image Tag: ${env.DEPLOY_IMAGE_TAG}
-                    Backend: ${env.BACKEND_IMAGE}
-                    Frontend: ${env.FRONTEND_IMAGE}
-                    ════════════════════════════════════════
-                    
-                    ⚠️ This will deploy to PRODUCTION.
-                    Please review and approve.
-                    """
-                    
-                    echo approvalMessage
-                    
-                    // FIX 8: Only send Slack if enabled
-                    if (env.SLACK_ENABLED == 'true') {
-                        slackSend(
-                            channel: '#deployments',
-                            color: 'warning',
-                            message: "🔔 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
-                        )
-                    }
-                    
-                    timeout(time: 30, unit: 'MINUTES') {
-                        input(
-                            message: "Deploy ${env.DEPLOY_IMAGE_TAG} to PRODUCTION?",
-                            ok: 'Approve Deployment',
-                            submitter: 'admin,devops-team',
-                            submitterParameter: 'APPROVER'
-                        )
-                    }
-                    
-                    echo "✅ Production deployment approved by ${env.APPROVER}"
-                    
-                    // FIX 8: Only send Slack if enabled
-                    if (env.SLACK_ENABLED == 'true') {
-                        slackSend(
-                            channel: '#deployments',
-                            color: 'good',
-                            message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
-                        )
+                    if (params.ENVIRONMENT == 'prod' && !params.DRY_RUN) {
+                        echo '⏳ Waiting for production deployment approval...'
+                        
+                        def approvalMessage = """
+                        🚀 PRODUCTION DEPLOYMENT REQUEST
+                        ════════════════════════════════════════
+                        Image Tag: ${env.DEPLOY_IMAGE_TAG}
+                        Backend: ${env.BACKEND_IMAGE}
+                        Frontend: ${env.FRONTEND_IMAGE}
+                        ════════════════════════════════════════
+                        
+                        ⚠️ This will deploy to PRODUCTION.
+                        Please review and approve.
+                        """
+                        
+                        echo approvalMessage
+                        
+                        // FIX 8: Only send Slack if enabled
+                        if (env.SLACK_ENABLED == 'true') {
+                            slackSend(
+                                channel: '#deployments',
+                                color: 'warning',
+                                message: "🔔 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
+                            )
+                        }
+                        
+                        timeout(time: 30, unit: 'MINUTES') {
+                            input(
+                                message: "Deploy ${env.DEPLOY_IMAGE_TAG} to PRODUCTION?",
+                                ok: 'Approve Deployment',
+                                submitter: 'admin,devops-team',
+                                submitterParameter: 'APPROVER'
+                            )
+                        }
+                        
+                        echo "✅ Production deployment approved by ${env.APPROVER}"
+                        
+                        // FIX 8: Only send Slack if enabled
+                        if (env.SLACK_ENABLED == 'true') {
+                            slackSend(
+                                channel: '#deployments',
+                                color: 'good',
+                                message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                            )
+                        }
+                    } else {
+                        echo "ℹ️ Production approval not required for ${params.ENVIRONMENT} environment"
                     }
                 }
             }
@@ -269,36 +270,39 @@ pipeline {
         // Stage 5: Capture Current State (for Rollback)
         //======================================================================
         stage('Capture Rollback Info') {
-            when {
-                expression { !params.DRY_RUN }
-            }
             steps {
-                echo '📸 Capturing current deployment state for rollback...'
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-credentials',
-                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
-                ]) {
-                    script {
-                        sh '''
-                            # Configure kubectl for EKS
-                            aws eks update-kubeconfig --region us-east-1 --name ${EKS_CLUSTER_NAME}
-                        '''
-                        
-                        // Get current Helm release revisions
-                        env.BACKEND_REVISION = sh(
-                            script: "helm history shopdeploy-backend -n ${env.K8S_NAMESPACE} --max 1 -o json 2>/dev/null | jq -r '.[0].revision' || echo '0'",
-                            returnStdout: true
-                        ).trim()
-                        
-                        env.FRONTEND_REVISION = sh(
-                            script: "helm history shopdeploy-frontend -n ${env.K8S_NAMESPACE} --max 1 -o json 2>/dev/null | jq -r '.[0].revision' || echo '0'",
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "📋 Current backend revision: ${env.BACKEND_REVISION}"
-                        echo "📋 Current frontend revision: ${env.FRONTEND_REVISION}"
+                script {
+                    if (params.DRY_RUN) {
+                        echo 'ℹ️ Dry run mode - skipping rollback info capture'
+                        env.BACKEND_REVISION = '0'
+                        env.FRONTEND_REVISION = '0'
+                    } else {
+                        echo '📸 Capturing current deployment state for rollback...'
+                        withCredentials([
+                            [$class: 'AmazonWebServicesCredentialsBinding',
+                             credentialsId: 'aws-credentials',
+                             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                        ]) {
+                            sh '''
+                                # Configure kubectl for EKS
+                                aws eks update-kubeconfig --region us-east-1 --name ${EKS_CLUSTER_NAME}
+                            '''
+                            
+                            // Get current Helm release revisions
+                            env.BACKEND_REVISION = sh(
+                                script: "helm history shopdeploy-backend -n ${env.K8S_NAMESPACE} --max 1 -o json 2>/dev/null | jq -r '.[0].revision' || echo '0'",
+                                returnStdout: true
+                            ).trim()
+                            
+                            env.FRONTEND_REVISION = sh(
+                                script: "helm history shopdeploy-frontend -n ${env.K8S_NAMESPACE} --max 1 -o json 2>/dev/null | jq -r '.[0].revision' || echo '0'",
+                                returnStdout: true
+                            ).trim()
+                            
+                            echo "📋 Current backend revision: ${env.BACKEND_REVISION}"
+                            echo "📋 Current frontend revision: ${env.FRONTEND_REVISION}"
+                        }
                     }
                 }
             }
@@ -363,58 +367,63 @@ pipeline {
         // Stage 7: Smoke Tests
         //======================================================================
         stage('Smoke Tests') {
-            when {
-                expression { !params.SKIP_SMOKE_TESTS && !params.DRY_RUN }
-            }
             steps {
-                echo '🔬 Running smoke tests...'
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-credentials',
-                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
-                ]) {
-                    sh """
-                        # Configure kubectl
-                        aws eks update-kubeconfig --region us-east-1 --name ${EKS_CLUSTER_NAME}
-                        
-                        echo "📋 Checking deployment status..."
-                        
-                        # Check pod status
-                        echo "🔍 Pod Status:"
-                        kubectl get pods -n ${env.K8S_NAMESPACE} -o wide
-                        
-                        # Wait for backend rollout
-                        echo "⏳ Waiting for backend rollout..."
-                        kubectl rollout status deployment/shopdeploy-backend -n ${env.K8S_NAMESPACE} --timeout=300s
-                        
-                        # Wait for frontend rollout
-                        echo "⏳ Waiting for frontend rollout..."
-                        kubectl rollout status deployment/shopdeploy-frontend -n ${env.K8S_NAMESPACE} --timeout=300s
-                        
-                        # Get service endpoints
-                        echo "🌐 Service Endpoints:"
-                        kubectl get svc -n ${env.K8S_NAMESPACE}
-                        
-                        # Get ingress
-                        echo "🚪 Ingress:"
-                        kubectl get ingress -n ${env.K8S_NAMESPACE} || echo "No ingress configured"
-                        
-                        # Verify pods are running
-                        echo "🏥 Health check..."
-                        BACKEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=shopdeploy-backend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
-                        FRONTEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=shopdeploy-frontend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
-                        
-                        if [[ "\$BACKEND_READY" == *"True"* ]] && [[ "\$FRONTEND_READY" == *"True"* ]]; then
-                            echo "✅ All pods are healthy"
-                        else
-                            echo "❌ Some pods are not ready"
-                            kubectl describe pods -n ${env.K8S_NAMESPACE}
-                            exit 1
-                        fi
-                        
-                        echo "✅ Smoke tests passed"
-                    """
+                script {
+                    if (params.SKIP_SMOKE_TESTS) {
+                        echo 'ℹ️ Smoke tests skipped by user request'
+                    } else if (params.DRY_RUN) {
+                        echo 'ℹ️ Dry run mode - skipping smoke tests'
+                    } else {
+                        echo '🔬 Running smoke tests...'
+                        withCredentials([
+                            [$class: 'AmazonWebServicesCredentialsBinding',
+                             credentialsId: 'aws-credentials',
+                             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                        ]) {
+                            sh """
+                                # Configure kubectl
+                                aws eks update-kubeconfig --region us-east-1 --name ${EKS_CLUSTER_NAME}
+                                
+                                echo "📋 Checking deployment status..."
+                                
+                                # Check pod status
+                                echo "🔍 Pod Status:"
+                                kubectl get pods -n ${env.K8S_NAMESPACE} -o wide
+                                
+                                # Wait for backend rollout
+                                echo "⏳ Waiting for backend rollout..."
+                                kubectl rollout status deployment/shopdeploy-backend -n ${env.K8S_NAMESPACE} --timeout=300s
+                                
+                                # Wait for frontend rollout
+                                echo "⏳ Waiting for frontend rollout..."
+                                kubectl rollout status deployment/shopdeploy-frontend -n ${env.K8S_NAMESPACE} --timeout=300s
+                                
+                                # Get service endpoints
+                                echo "🌐 Service Endpoints:"
+                                kubectl get svc -n ${env.K8S_NAMESPACE}
+                                
+                                # Get ingress
+                                echo "🚪 Ingress:"
+                                kubectl get ingress -n ${env.K8S_NAMESPACE} || echo "No ingress configured"
+                                
+                                # Verify pods are running
+                                echo "🏥 Health check..."
+                                BACKEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=shopdeploy-backend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
+                                FRONTEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=shopdeploy-frontend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
+                                
+                                if [[ "\$BACKEND_READY" == *"True"* ]] && [[ "\$FRONTEND_READY" == *"True"* ]]; then
+                                    echo "✅ All pods are healthy"
+                                else
+                                    echo "❌ Some pods are not ready"
+                                    kubectl describe pods -n ${env.K8S_NAMESPACE}
+                                    exit 1
+                                fi
+                                
+                                echo "✅ Smoke tests passed"
+                            """
+                        }
+                    }
                 }
             }
         }
@@ -423,19 +432,22 @@ pipeline {
         // Stage 8: Integration Tests (Non-Prod Only)
         //======================================================================
         stage('Integration Tests') {
-            when {
-                expression { params.ENVIRONMENT != 'prod' && !params.DRY_RUN }
-            }
             steps {
-                echo '🧪 Running integration tests...'
                 script {
-                    def integrationTestFile = "shopdeploy-backend/tests/integration.test.js"
-                    if (fileExists(integrationTestFile)) {
-                        dir("shopdeploy-backend") {
-                            sh 'npm run test:integration || echo "⚠️ Some integration tests failed"'
-                        }
+                    if (params.ENVIRONMENT == 'prod') {
+                        echo 'ℹ️ Integration tests skipped for production environment'
+                    } else if (params.DRY_RUN) {
+                        echo 'ℹ️ Dry run mode - skipping integration tests'
                     } else {
-                        echo 'ℹ️ No integration tests found, skipping...'
+                        echo '🧪 Running integration tests...'
+                        def integrationTestFile = "shopdeploy-backend/tests/integration.test.js"
+                        if (fileExists(integrationTestFile)) {
+                            dir("shopdeploy-backend") {
+                                sh 'npm run test:integration || echo "⚠️ Some integration tests failed"'
+                            }
+                        } else {
+                            echo 'ℹ️ No integration tests found, skipping...'
+                        }
                     }
                 }
             }
