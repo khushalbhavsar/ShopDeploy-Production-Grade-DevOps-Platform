@@ -44,36 +44,62 @@ pipeline {
     }
 
     parameters {
-        string(
-            name: 'IMAGE_TAG',
-            defaultValue: '',
-            description: 'Docker image tag to deploy (e.g., 42-a1b2c3d). Leave empty to use latest from Parameter Store.'
-        )
         choice(
             name: 'ENVIRONMENT',
             choices: ['dev', 'staging', 'prod'],
-            description: 'Target deployment environment'
+            description: '🌍 Target deployment environment (REQUIRED)'
+        )
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: '🏷️ Docker image tag to deploy (e.g., 42-a1b2c3d). Leave empty to use latest from Parameter Store.'
         )
         booleanParam(
             name: 'SKIP_SMOKE_TESTS',
             defaultValue: false,
-            description: 'Skip smoke tests after deployment'
+            description: '⚡ Skip smoke tests after deployment (NOT recommended for prod)'
         )
         booleanParam(
             name: 'DRY_RUN',
             defaultValue: false,
-            description: 'Perform dry-run without actual deployment'
+            description: '🧪 Perform dry-run without actual deployment'
         )
     }
 
     stages {
         //======================================================================
-        // Stage 1: Initialize
+        // Stage 1: Initialize & Environment Setup
         //======================================================================
         stage('Initialize') {
             steps {
-                echo 'Initializing CD Pipeline...'
                 script {
+                    // Set environment-specific variables
+                    switch(params.ENVIRONMENT) {
+                        case 'prod':
+                            env.ENV_EMOJI = '🔴'
+                            env.ENV_COLOR = 'danger'
+                            break
+                        case 'staging':
+                            env.ENV_EMOJI = '🟡'
+                            env.ENV_COLOR = 'warning'
+                            break
+                        case 'dev':
+                        default:
+                            env.ENV_EMOJI = '🟢'
+                            env.ENV_COLOR = 'good'
+                            break
+                    }
+                    
+                    // Display selected environment prominently
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "${env.ENV_EMOJI} CD PIPELINE - ${params.ENVIRONMENT.toUpperCase()} DEPLOYMENT"
+                    echo "═══════════════════════════════════════════════════════════"
+                    
+                    // Block skipping smoke tests in production
+                    if (params.ENVIRONMENT == 'prod' && params.SKIP_SMOKE_TESTS && !params.DRY_RUN) {
+                        error("❌ Cannot skip smoke tests for PRODUCTION deployment!")
+                    }
+                    
                     // FIX 7: Environment-specific namespace
                     env.K8S_NAMESPACE = "shopdeploy-${params.ENVIRONMENT}"
                     echo "Target namespace: ${env.K8S_NAMESPACE}"
@@ -123,7 +149,14 @@ pipeline {
                     env.BACKEND_IMAGE = "${env.ECR_REGISTRY}/${ECR_BACKEND_REPO}:${env.DEPLOY_IMAGE_TAG}"
                     env.FRONTEND_IMAGE = "${env.ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${env.DEPLOY_IMAGE_TAG}"
                     
-                    echo "Deployment Config - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Dry Run: ${params.DRY_RUN}"
+                    echo ""
+                    echo "Deployment Configuration:"
+                    echo "  Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                    echo "  Namespace:   ${env.K8S_NAMESPACE}"
+                    echo "  Image Tag:   ${env.DEPLOY_IMAGE_TAG}"
+                    echo "  Dry Run:     ${params.DRY_RUN}"
+                    echo "  Skip Tests:  ${params.SKIP_SMOKE_TESTS}"
+                    echo "═══════════════════════════════════════════════════════════"
                 }
             }
         }
@@ -200,58 +233,49 @@ Tool verification complete"
         }
 
         //======================================================================
-        // Stage 4: Production Approval
+        // Stage 4: Production Approval Gate
         //======================================================================
         stage('Production Approval') {
+            when {
+                expression { params.ENVIRONMENT == 'prod' && !params.DRY_RUN }
+            }
             steps {
                 script {
-                    if (params.ENVIRONMENT == 'prod' && !params.DRY_RUN) {
-                        echo 'Waiting for production deployment approval...'
-                        
-                        def approvalMessage = """
-                        PRODUCTION DEPLOYMENT REQUEST
-                        ========================================
-                        Image Tag: ${env.DEPLOY_IMAGE_TAG}
-                        Backend: ${env.BACKEND_IMAGE}
-                        Frontend: ${env.FRONTEND_IMAGE}
-                        ========================================
-                        
-                        This will deploy to PRODUCTION.
-                        Please review and approve.
-                        """
-                        
-                        echo approvalMessage
-                        
-                        // FIX 8: Only send Slack if enabled
-                        if (env.SLACK_ENABLED == 'true') {
-                            slackSend(
-                                channel: '#deployments',
-                                color: 'warning',
-                                message: "Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
-                            )
-                        }
-                        
-                        timeout(time: 30, unit: 'MINUTES') {
-                            input(
-                                message: "Deploy ${env.DEPLOY_IMAGE_TAG} to PRODUCTION?",
-                                ok: 'Approve Deployment',
-                                submitter: 'admin,devops-team',
-                                submitterParameter: 'APPROVER'
-                            )
-                        }
-                        
-                        echo "Production deployment approved by ${env.APPROVER}"
-                        
-                        // FIX 8: Only send Slack if enabled
-                        if (env.SLACK_ENABLED == 'true') {
-                            slackSend(
-                                channel: '#deployments',
-                                color: 'good',
-                                message: "Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
-                            )
-                        }
-                    } else {
-                        echo "Production approval not required for ${params.ENVIRONMENT} environment"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "🔴 PRODUCTION DEPLOYMENT APPROVAL REQUIRED"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "Image Tag: ${env.DEPLOY_IMAGE_TAG}"
+                    echo "Backend:   ${env.BACKEND_IMAGE}"
+                    echo "Frontend:  ${env.FRONTEND_IMAGE}"
+                    echo "═══════════════════════════════════════════════════════════"
+                    
+                    // FIX 8: Only send Slack if enabled
+                    if (env.SLACK_ENABLED == 'true') {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'warning',
+                            message: "🔴 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
+                        )
+                    }
+                    
+                    timeout(time: 30, unit: 'MINUTES') {
+                        input(
+                            message: "Deploy ${env.DEPLOY_IMAGE_TAG} to PRODUCTION?",
+                            ok: '✅ Approve Deployment',
+                            submitter: 'admin,devops-team',
+                            submitterParameter: 'APPROVER'
+                        )
+                    }
+                    
+                    echo "✅ Production deployment approved by ${env.APPROVER}"
+                    
+                    // FIX 8: Only send Slack if enabled
+                    if (env.SLACK_ENABLED == 'true') {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'good',
+                            message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        )
                     }
                 }
             }
@@ -549,16 +573,25 @@ Tool verification complete"
         success {
             script {
                 if (params.DRY_RUN) {
-                    echo "Dry run completed successfully"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "🧪 DRY RUN COMPLETED SUCCESSFULLY"
+                    echo "═══════════════════════════════════════════════════════════"
                 } else {
-                    echo "CD Pipeline completed successfully - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Duration: ${currentBuild.durationString}"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "${env.ENV_EMOJI} CD PIPELINE SUCCESS"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                    echo "Namespace:   ${env.K8S_NAMESPACE}"
+                    echo "Image Tag:   ${env.DEPLOY_IMAGE_TAG}"
+                    echo "Duration:    ${currentBuild.durationString}"
+                    echo "═══════════════════════════════════════════════════════════"
                     
                     // FIX 8: Only send Slack if enabled
                     if (env.SLACK_ENABLED == 'true') {
                         slackSend(
                             channel: '#deployments',
-                            color: 'good',
-                            message: "Deployed to ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Duration: ${currentBuild.durationString}"
+                            color: env.ENV_COLOR,
+                            message: "${env.ENV_EMOJI} Deployed to ${params.ENVIRONMENT.toUpperCase()} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG}"
                         )
                     } else {
                         echo "Slack not configured - skipping notification"
@@ -569,7 +602,14 @@ Tool verification complete"
 
         failure {
             script {
-                echo "CD Pipeline failed - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Stage: ${env.STAGE_NAME}"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "❌ CD PIPELINE FAILED"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                echo "Namespace:   ${env.K8S_NAMESPACE}"
+                echo "Image Tag:   ${env.DEPLOY_IMAGE_TAG}"
+                echo "Failed Stage: ${env.STAGE_NAME}"
+                echo "═══════════════════════════════════════════════════════════"
                 
                 // Note: With --atomic flag, Helm auto-rollback is handled automatically
                 // Manual rollback code removed as it's now redundant (FIX 6)
@@ -579,7 +619,7 @@ Tool verification complete"
                     slackSend(
                         channel: '#deployments',
                         color: 'danger',
-                        message: "Deploy FAILED: ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
+                        message: "❌ Deploy FAILED: ${params.ENVIRONMENT.toUpperCase()} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
                     )
                 } else {
                     echo "Slack not configured - skipping notification"
@@ -589,13 +629,19 @@ Tool verification complete"
 
         aborted {
             script {
-                echo 'CD Pipeline was aborted'
+                echo "═══════════════════════════════════════════════════════════"
+                echo "⚠️ CD PIPELINE ABORTED"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                echo "Image Tag:   ${env.DEPLOY_IMAGE_TAG}"
+                echo "═══════════════════════════════════════════════════════════"
+                
                 // FIX 8: Only send Slack if enabled
                 if (env.SLACK_ENABLED == 'true') {
                     slackSend(
                         channel: '#deployments',
                         color: 'warning',
-                        message: "Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        message: "⚠️ Deployment aborted: ${params.ENVIRONMENT.toUpperCase()} | Tag: ${env.DEPLOY_IMAGE_TAG}"
                     )
                 } else {
                     echo "Slack not configured - skipping notification"

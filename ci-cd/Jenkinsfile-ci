@@ -48,15 +48,20 @@ pipeline {
     }
 
     parameters {
-        booleanParam(
-            name: 'TRIGGER_CD',
-            defaultValue: true,
-            description: 'Trigger CD pipeline after successful build'
-        )
         choice(
             name: 'TARGET_ENVIRONMENT',
             choices: ['dev', 'staging', 'prod'],
-            description: 'Target environment for CD pipeline'
+            description: '🌍 Select deployment environment (REQUIRED)'
+        )
+        booleanParam(
+            name: 'TRIGGER_CD',
+            defaultValue: true,
+            description: '🚀 Trigger CD pipeline after successful build'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: '⚡ Skip tests (NOT recommended for prod)'
         )
     }
 
@@ -66,7 +71,53 @@ pipeline {
 
     stages {
         //======================================================================
-        // Stage 1: Checkout Source Code
+        // Stage 1: Environment Validation
+        //======================================================================
+        stage('Environment Setup') {
+            steps {
+                script {
+                    // Display selected environment prominently
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "🌍 TARGET ENVIRONMENT: ${params.TARGET_ENVIRONMENT.toUpperCase()}"
+                    echo "═══════════════════════════════════════════════════════════"
+                    
+                    // Set environment-specific variables
+                    switch(params.TARGET_ENVIRONMENT) {
+                        case 'prod':
+                            env.ENV_EMOJI = '🔴'
+                            env.API_URL = 'https://api.shopdeploy.com/api'
+                            env.REQUIRE_APPROVAL = 'true'
+                            echo "${env.ENV_EMOJI} PRODUCTION deployment - Extra validations enabled"
+                            break
+                        case 'staging':
+                            env.ENV_EMOJI = '🟡'
+                            env.API_URL = 'https://api-staging.shopdeploy.com/api'
+                            env.REQUIRE_APPROVAL = 'false'
+                            echo "${env.ENV_EMOJI} STAGING deployment"
+                            break
+                        case 'dev':
+                        default:
+                            env.ENV_EMOJI = '🟢'
+                            env.API_URL = 'https://api-dev.shopdeploy.com/api'
+                            env.REQUIRE_APPROVAL = 'false'
+                            echo "${env.ENV_EMOJI} DEVELOPMENT deployment"
+                            break
+                    }
+                    
+                    // Block skipping tests in production
+                    if (params.TARGET_ENVIRONMENT == 'prod' && params.SKIP_TESTS) {
+                        error("❌ Cannot skip tests for PRODUCTION deployment!")
+                    }
+                    
+                    echo "API URL: ${env.API_URL}"
+                    echo "Trigger CD: ${params.TRIGGER_CD}"
+                    echo "═══════════════════════════════════════════════════════════"
+                }
+            }
+        }
+
+        //======================================================================
+        // Stage 2: Checkout Source Code
         //======================================================================
         stage('Checkout') {
             steps {
@@ -91,7 +142,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 2: Detect Changes
+        // Stage 3: Detect Changes
         //======================================================================
         stage('Detect Changes') {
             steps {
@@ -118,7 +169,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 3: Install Dependencies
+        // Stage 4: Install Dependencies
         //======================================================================
         stage('Install Dependencies') {
             parallel {
@@ -149,7 +200,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 4: Code Linting
+        // Stage 5: Code Linting
         //======================================================================
         stage('Code Linting') {
             parallel {
@@ -174,9 +225,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 5: Unit Tests
+        // Stage 6: Unit Tests (Skip if SKIP_TESTS=true)
         //======================================================================
         stage('Unit Tests') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
             parallel {
                 stage('Backend Tests') {
                     steps {
@@ -209,9 +263,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 6: Verify Coverage Reports Exist
+        // Stage 7: Verify Coverage Reports Exist
         //======================================================================
         stage('Verify Coverage') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
             parallel {
                 stage('Verify Backend Coverage') {
                     steps {
@@ -253,7 +310,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 7: SonarQube Analysis (Optional - Skips if not configured)
+        // Stage 8: SonarQube Analysis (Optional - Skips if not configured)
         //======================================================================
         stage('SonarQube Analysis') {
             steps {
@@ -332,7 +389,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 8: Quality Gate (Skips if SonarQube not configured)
+        // Stage 9: Quality Gate (Skips if SonarQube not configured)
         //======================================================================
         stage('Quality Gate') {
             when {
@@ -347,13 +404,13 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 9: Build Docker Images
+        // Stage 10: Build Docker Images
         //======================================================================
         stage('Build Docker Images') {
             parallel {
                 stage('Build Backend Image') {
                     steps {
-                        echo 'Building backend Docker image...'
+                        echo "${env.ENV_EMOJI} Building backend Docker image for ${params.TARGET_ENVIRONMENT}..."
                         withCredentials([[
                             $class: 'AmazonWebServicesCredentialsBinding',
                             credentialsId: 'aws-credentials',
@@ -383,35 +440,30 @@ pipeline {
 
                 stage('Build Frontend Image') {
                     steps {
-                        echo 'Building frontend Docker image...'
+                        echo "Building frontend Docker image for ${params.TARGET_ENVIRONMENT}..."
                         withCredentials([[
                             $class: 'AmazonWebServicesCredentialsBinding',
                             credentialsId: 'aws-credentials',
                             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                         ]]) {
-                            script {
-                                // Build with dev API URL - environment-specific URLs are set at deploy time
-                                def apiUrl = "https://api-${params.TARGET_ENVIRONMENT}.shopdeploy.com/api"
-                                if (params.TARGET_ENVIRONMENT == 'prod') {
-                                    apiUrl = 'https://api.shopdeploy.com/api'
-                                }
+                            sh """
+                                # Pull latest image for cache (ignore if not exists)
+                                docker pull ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:latest || true
                                 
-                                sh """
-                                    # Pull latest image for cache (ignore if not exists)
-                                    docker pull ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:latest || true
-                                    
-                                    docker build \
-                                        --cache-from ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:latest \
-                                        --tag shopdeploy-frontend:${IMAGE_TAG} \
-                                        --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-                                        --build-arg VERSION=${IMAGE_TAG} \
-                                        --build-arg VITE_API_URL=${apiUrl} \
-                                        --build-arg BUILDKIT_INLINE_CACHE=1 \
-                                        --file ${FRONTEND_DIR}/Dockerfile \
-                                        ${FRONTEND_DIR}
-                                """
-                            }
+                                echo "Using API URL: ${env.API_URL}"
+                                
+                                docker build \
+                                    --cache-from ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:latest \
+                                    --tag shopdeploy-frontend:${IMAGE_TAG} \
+                                    --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                                    --build-arg VERSION=${IMAGE_TAG} \
+                                    --build-arg VITE_API_URL=${env.API_URL} \
+                                    --build-arg ENVIRONMENT=${params.TARGET_ENVIRONMENT} \
+                                    --build-arg BUILDKIT_INLINE_CACHE=1 \
+                                    --file ${FRONTEND_DIR}/Dockerfile \
+                                    ${FRONTEND_DIR}
+                            """
                         }
                     }
                 }
@@ -419,7 +471,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 10: Security Scan (Trivy)
+        // Stage 11: Security Scan (Trivy)
         //======================================================================
         stage('Security Scan') {
             parallel {
@@ -452,7 +504,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 11: Push to ECR
+        // Stage 12: Push to ECR
         //======================================================================
         stage('Push to ECR') {
             steps {
@@ -491,7 +543,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 12: Save Image Tag
+        // Stage 13: Save Image Tag
         //======================================================================
         stage('Save Image Tag') {
             steps {
@@ -541,7 +593,7 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 13: Cleanup
+        // Stage 14: Cleanup
         //======================================================================
         stage('Cleanup') {
             steps {
@@ -564,14 +616,21 @@ pipeline {
     post {
         success {
             script {
-                echo "CI Pipeline completed successfully - Build #${BUILD_NUMBER}, Image Tag: ${IMAGE_TAG}, Duration: ${currentBuild.durationString}"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "${env.ENV_EMOJI} CI PIPELINE SUCCESS"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.TARGET_ENVIRONMENT.toUpperCase()}"
+                echo "Build: #${BUILD_NUMBER}"
+                echo "Image Tag: ${IMAGE_TAG}"
+                echo "Duration: ${currentBuild.durationString}"
+                echo "═══════════════════════════════════════════════════════════"
                 
                 // Slack notification (optional - skip if not configured)
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'good',
-                        message: "CI Build Success | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG} | Duration: ${currentBuild.durationString}"
+                        message: "${env.ENV_EMOJI} CI Build Success | ${params.TARGET_ENVIRONMENT.toUpperCase()} | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
                     )
                 } catch (Exception e) {
                     echo "Slack notification skipped (not configured)"
@@ -580,31 +639,41 @@ pipeline {
                 // Trigger CD pipeline if enabled and exists
                 if (params.TRIGGER_CD) {
                     try {
-                        echo "Triggering CD pipeline for ${params.TARGET_ENVIRONMENT}..."
+                        echo "🚀 Triggering CD pipeline for ${params.TARGET_ENVIRONMENT.toUpperCase()}..."
                         build job: 'shopdeploy-cd',
                             parameters: [
                                 string(name: 'IMAGE_TAG', value: IMAGE_TAG),
                                 string(name: 'ENVIRONMENT', value: params.TARGET_ENVIRONMENT)
                             ],
                             wait: false  // Don't wait for CD to complete
+                        echo "✅ CD pipeline triggered successfully!"
                     } catch (Exception e) {
-                        echo "CD pipeline 'shopdeploy-cd' not found. Create the CD pipeline job first."
+                        echo "⚠️ CD pipeline 'shopdeploy-cd' not found. Create the CD pipeline job first."
                         echo "Image tag ${IMAGE_TAG} is saved and can be used for manual deployment."
                     }
+                } else {
+                    echo "ℹ️ CD pipeline trigger disabled. Manual deployment required."
+                    echo "Use Image Tag: ${IMAGE_TAG}"
                 }
             }
         }
 
         failure {
             script {
-                echo "CI Pipeline failed - Build #${BUILD_NUMBER}, Stage: ${env.STAGE_NAME}"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "❌ CI PIPELINE FAILED"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.TARGET_ENVIRONMENT.toUpperCase()}"
+                echo "Build: #${BUILD_NUMBER}"
+                echo "Failed Stage: ${env.STAGE_NAME}"
+                echo "═══════════════════════════════════════════════════════════"
                 
                 // Slack notification (optional - skip if not configured)
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'danger',
-                        message: "CI Build FAILED | Build #${BUILD_NUMBER} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
+                        message: "❌ CI Build FAILED | ${params.TARGET_ENVIRONMENT.toUpperCase()} | Build #${BUILD_NUMBER} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
                     )
                 } catch (Exception e) {
                     echo "Slack notification skipped (not configured)"
@@ -613,14 +682,19 @@ pipeline {
         }
 
         unstable {
-            echo 'CI Pipeline completed with warnings (unstable)'
-            // Slack notification (optional - skip if not configured)
             script {
+                echo "═══════════════════════════════════════════════════════════"
+                echo "⚠️ CI PIPELINE UNSTABLE"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.TARGET_ENVIRONMENT.toUpperCase()}"
+                echo "Build: #${BUILD_NUMBER}"
+                echo "═══════════════════════════════════════════════════════════"
+                
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'warning',
-                        message: "CI Build Unstable | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
+                        message: "⚠️ CI Build Unstable | ${params.TARGET_ENVIRONMENT.toUpperCase()} | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
                     )
                 } catch (Exception e) {
                     echo "Slack notification skipped (not configured)"
