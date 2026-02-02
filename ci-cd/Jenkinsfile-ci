@@ -352,7 +352,6 @@ pipeline {
                                     -Dsonar.sources=src \
                                     -Dsonar.exclusions=**/node_modules/**,**/coverage/** \
                                     -Dsonar.sourceEncoding=UTF-8 \
-                                    -Dsonar.branch.name=${env.BRANCH_NAME ?: 'main'} \
                                     ${backendCoverageFlag}
                             """
                         }
@@ -372,9 +371,9 @@ pipeline {
                                     -Dsonar.sources=src \
                                     -Dsonar.exclusions=**/node_modules/**,**/dist/** \
                                     -Dsonar.sourceEncoding=UTF-8 \
-                                    -Dsonar.branch.name=${env.BRANCH_NAME ?: 'main'} \
                                     ${frontendCoverageFlag}
                             """
+                        }
                         }
                     }
                     
