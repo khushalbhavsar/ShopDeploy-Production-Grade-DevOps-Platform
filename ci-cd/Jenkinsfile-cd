@@ -517,7 +517,7 @@ Tool verification complete"
         }
 
         //======================================================================
-        // Stage 8: Integration Tests (Non-Prod Only)
+        // Stage 9: Integration Tests (Non-Prod Only)
         //======================================================================
         stage('Integration Tests') {
             steps {
@@ -535,7 +535,6 @@ Tool verification complete"
                             }
                         } else {
                             echo 'No integration tests found, skipping...'
-                        }
                         }
                     }
                 }
