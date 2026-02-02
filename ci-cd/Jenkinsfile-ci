@@ -63,6 +63,11 @@ pipeline {
             defaultValue: false,
             description: '⚡ Skip tests (NOT recommended for prod)'
         )
+        booleanParam(
+            name: 'SKIP_SONAR',
+            defaultValue: true,
+            description: '🔍 Skip SonarQube analysis (set to false when SonarQube is configured)'
+        )
     }
 
     triggers {
@@ -78,39 +83,38 @@ pipeline {
                 script {
                     // Display selected environment prominently
                     echo "═══════════════════════════════════════════════════════════"
-                    echo "🌍 TARGET ENVIRONMENT: ${params.TARGET_ENVIRONMENT.toUpperCase()}"
+                    echo "🌍 TARGET ENVIRONMENT: ${params.TARGET_ENVIRONMENT?.toUpperCase() ?: 'DEV'}"
                     echo "═══════════════════════════════════════════════════════════"
                     
+                    // Default environment if not set
+                    def targetEnv = params.TARGET_ENVIRONMENT ?: 'dev'
+                    
                     // Set environment-specific variables
-                    switch(params.TARGET_ENVIRONMENT) {
-                        case 'prod':
-                            env.ENV_EMOJI = '🔴'
-                            env.API_URL = 'https://api.shopdeploy.com/api'
-                            env.REQUIRE_APPROVAL = 'true'
-                            echo "${env.ENV_EMOJI} PRODUCTION deployment - Extra validations enabled"
-                            break
-                        case 'staging':
-                            env.ENV_EMOJI = '🟡'
-                            env.API_URL = 'https://api-staging.shopdeploy.com/api'
-                            env.REQUIRE_APPROVAL = 'false'
-                            echo "${env.ENV_EMOJI} STAGING deployment"
-                            break
-                        case 'dev':
-                        default:
-                            env.ENV_EMOJI = '🟢'
-                            env.API_URL = 'https://api-dev.shopdeploy.com/api'
-                            env.REQUIRE_APPROVAL = 'false'
-                            echo "${env.ENV_EMOJI} DEVELOPMENT deployment"
-                            break
+                    if (targetEnv == 'prod') {
+                        env.ENV_EMOJI = '🔴'
+                        env.API_URL = 'https://api.shopdeploy.com/api'
+                        env.REQUIRE_APPROVAL = 'true'
+                        echo "${env.ENV_EMOJI} PRODUCTION deployment - Extra validations enabled"
+                    } else if (targetEnv == 'staging') {
+                        env.ENV_EMOJI = '🟡'
+                        env.API_URL = 'https://api-staging.shopdeploy.com/api'
+                        env.REQUIRE_APPROVAL = 'false'
+                        echo "${env.ENV_EMOJI} STAGING deployment"
+                    } else {
+                        env.ENV_EMOJI = '🟢'
+                        env.API_URL = 'https://api-dev.shopdeploy.com/api'
+                        env.REQUIRE_APPROVAL = 'false'
+                        echo "${env.ENV_EMOJI} DEVELOPMENT deployment"
                     }
                     
                     // Block skipping tests in production
-                    if (params.TARGET_ENVIRONMENT == 'prod' && params.SKIP_TESTS) {
+                    if (targetEnv == 'prod' && params.SKIP_TESTS) {
                         error("❌ Cannot skip tests for PRODUCTION deployment!")
                     }
                     
                     echo "API URL: ${env.API_URL}"
                     echo "Trigger CD: ${params.TRIGGER_CD}"
+                    echo "Skip SonarQube: ${params.SKIP_SONAR}"
                     echo "═══════════════════════════════════════════════════════════"
                 }
             }
@@ -310,9 +314,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 8: SonarQube Analysis (Required)
+        // Stage 8: SonarQube Analysis (Skips if SKIP_SONAR=true)
         //======================================================================
         stage('SonarQube Analysis') {
+            when {
+                expression { !params.SKIP_SONAR }
+            }
             steps {
                 script {
                     echo "═══════════════════════════════════════════════════════════"
@@ -370,9 +377,12 @@ pipeline {
         }
 
         //======================================================================
-        // Stage 9: Quality Gate (Required - Fails pipeline if quality fails)
+        // Stage 9: Quality Gate (Skips if SKIP_SONAR=true)
         //======================================================================
         stage('Quality Gate') {
+            when {
+                expression { !params.SKIP_SONAR }
+            }
             steps {
                 echo 'Waiting for SonarQube Quality Gate...'
                 timeout(time: 10, unit: 'MINUTES') {
