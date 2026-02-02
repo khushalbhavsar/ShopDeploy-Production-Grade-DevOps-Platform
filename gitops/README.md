@@ -144,6 +144,11 @@ image:
 
 replicaCount: 3
 
+service:
+  type: LoadBalancer
+  port: 5000
+  targetPort: 5000
+
 resources:
   limits:
     cpu: 1000m
@@ -151,6 +156,25 @@ resources:
   requests:
     cpu: 500m
     memory: 512Mi
+```
+
+### Frontend Configuration Notes
+
+The frontend runs on **nginx-unprivileged** image for enhanced security:
+- Container port: **8080** (non-privileged)
+- Service external port: **80**
+- Service type: **LoadBalancer** (all environments)
+
+```yaml
+# gitops/prod/frontend-values.yaml
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+
+securityContext:
+  runAsUser: 101
+  runAsNonRoot: true
 ```
 
 ---

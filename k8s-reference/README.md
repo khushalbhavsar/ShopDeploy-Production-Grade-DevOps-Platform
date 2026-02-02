@@ -214,10 +214,10 @@ k8s/
 ├── backend-configmap.yaml      # Backend environment configuration
 ├── backend-secret.yaml         # Backend sensitive data (⚠️ edit before use!)
 ├── backend-deployment.yaml     # Backend deployment (3 replicas)
-├── backend-service.yaml        # Backend ClusterIP service (port 5000)
+├── backend-service.yaml        # Backend LoadBalancer service (port 5000)
 ├── frontend-configmap.yaml     # Frontend configuration
-├── frontend-deployment.yaml    # Frontend deployment (3 replicas)
-├── frontend-service.yaml       # Frontend service (port 80)
+├── frontend-deployment.yaml    # Frontend deployment (3 replicas, nginx-unprivileged)
+├── frontend-service.yaml       # Frontend LoadBalancer service (port 80 → 8080)
 ├── mongodb-statefulset.yaml    # MongoDB StatefulSet (development)
 ├── mongodb-statefulset-prod.yaml # MongoDB StatefulSet (production)
 ├── ingress.yaml                # Ingress configuration (ALB/Nginx)
@@ -228,6 +228,14 @@ k8s/
 ├── kustomization.yaml          # Kustomize configuration
 └── README.md                   # This file
 ```
+
+### Service Configuration
+
+| Component | Service Type | External Port | Container Port | Notes |
+|-----------|--------------|---------------|----------------|-------|
+| **Backend** | LoadBalancer | 5000 | 5000 | REST API |
+| **Frontend** | LoadBalancer | 80 | 8080 | nginx-unprivileged |
+| **MongoDB** | ClusterIP | 27017 | 27017 | Internal only |
 
 ---
 

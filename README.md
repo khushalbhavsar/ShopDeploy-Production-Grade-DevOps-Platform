@@ -299,7 +299,7 @@ ShopDeploy/
 | Layer | Component | Technology | Purpose |
 |-------|-----------|------------|----------|
 | **Frontend** | Web App | React + Vite | User interface, SPA |
-| **Frontend** | Web Server | Nginx | Static file serving, reverse proxy |
+| **Frontend** | Web Server | nginx-unprivileged (port 8080) | Static file serving, non-root execution |
 | **Backend** | API Server | Node.js + Express | REST API, business logic |
 | **Backend** | Authentication | JWT | Secure user authentication |
 | **Database** | Primary DB | MongoDB | Data persistence |
@@ -311,6 +311,7 @@ ShopDeploy/
 | **CI/CD** | Pipeline | Jenkins | Build, test, deploy automation |
 | **Monitoring** | Metrics | Prometheus | Metrics collection |
 | **Monitoring** | Dashboards | Grafana | Visualization |
+| **Code Quality** | Analysis | SonarQube Community | Static code analysis |
 
 > 📊 See [docs/Project_Flow_Diagram.png](docs/Project_Flow_Diagram.png) for visual architecture diagram.
 
@@ -504,16 +505,23 @@ docker-compose down
 cd shopdeploy-backend
 docker build -t shopdeploy-backend:latest .
 
-# Build Frontend
+# Build Frontend (uses nginx-unprivileged on port 8080)
 cd shopdeploy-frontend
 docker build -t shopdeploy-frontend:latest .
 
 # Run Backend
 docker run -d -p 5000:5000 --env-file .env shopdeploy-backend:latest
 
-# Run Frontend
-docker run -d -p 3000:80 shopdeploy-frontend:latest
+# Run Frontend (nginx-unprivileged listens on 8080)
+docker run -d -p 8080:8080 shopdeploy-frontend:latest
 ```
+
+### Docker Image Details
+
+| Component | Base Image | Port | User |
+|-----------|------------|------|------|
+| **Backend** | node:18-alpine | 5000 | node |
+| **Frontend** | nginxinc/nginx-unprivileged:alpine | 8080 | 101 (non-root) |
 
 ---
 
@@ -535,12 +543,14 @@ kubectl create namespace shopdeploy
 # Deploy Backend
 helm upgrade --install shopdeploy-backend ./helm/backend \
   --namespace shopdeploy \
+  -f ./helm/backend/values-dev.yaml \
   --set image.repository=<ECR_URL>/shopdeploy-backend \
   --set image.tag=latest
 
 # Deploy Frontend
 helm upgrade --install shopdeploy-frontend ./helm/frontend \
   --namespace shopdeploy \
+  -f ./helm/frontend/values-dev.yaml \
   --set image.repository=<ECR_URL>/shopdeploy-frontend \
   --set image.tag=latest
 
@@ -548,6 +558,28 @@ helm upgrade --install shopdeploy-frontend ./helm/frontend \
 kubectl get pods -n shopdeploy
 kubectl get svc -n shopdeploy
 ```
+
+### Service Endpoints (LoadBalancer)
+
+After deployment, get the external URLs:
+
+```bash
+# Get LoadBalancer URLs
+kubectl get svc -n shopdeploy
+
+# Example output:
+# NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP                                                              PORT(S)
+# shopdeploy-backend     LoadBalancer   10.100.x.x      xxxxxx.us-east-1.elb.amazonaws.com                                      5000:xxxxx/TCP
+# shopdeploy-frontend    LoadBalancer   10.100.x.x      xxxxxx.us-east-1.elb.amazonaws.com                                      80:xxxxx/TCP
+```
+
+### Environment-Specific Deployments
+
+| Environment | Backend Values | Frontend Values | Service Type |
+|-------------|----------------|-----------------|--------------|
+| **Dev** | values-dev.yaml | values-dev.yaml | LoadBalancer |
+| **Staging** | values-staging.yaml | values-staging.yaml | LoadBalancer |
+| **Production** | values-prod.yaml | values-prod.yaml | LoadBalancer |
 
 ### Deploy with kubectl
 
@@ -685,13 +717,15 @@ The CI/CD workflow is split into two independent pipelines following the **"Buil
 | 3 | **Install Dependencies** | Parallel `npm ci` for backend & frontend |
 | 4 | **Code Linting** | Parallel ESLint checks for both services |
 | 5 | **Unit Tests** | Parallel Jest tests with coverage reports |
-| 6 | **SonarQube Analysis** | Code quality analysis (mandatory) |
-| 7 | **Quality Gate** | Verify SonarQube quality standards |
+| 6 | **SonarQube Analysis** | Code quality analysis (gracefully skips if not configured) |
+| 7 | **Quality Gate** | Verify SonarQube quality standards (if SonarQube is configured) |
 | 8 | **Build Docker Images** | Parallel multi-stage Docker builds with layer caching |
 | 9 | **Security Scan** | Trivy vulnerability scanning (HIGH/CRITICAL) |
 | 10 | **Push to ECR** | Push immutable tags to AWS ECR (with retry) |
 | 11 | **Save Tag** | Archive IMAGE_TAG + store in AWS Parameter Store |
 | 12 | **Cleanup** | Remove local Docker images |
+
+> **Note**: SonarQube requires Community Edition 10.6.0 or later. The pipeline will gracefully skip SonarQube stages if the `sonar-scanner` tool is not configured in Jenkins.
 
 ### CD Pipeline Stages (Jenkinsfile-cd)
 
@@ -710,11 +744,10 @@ The CI/CD workflow is split into two independent pipelines following the **"Buil
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `SKIP_TESTS` | Boolean | `false` | Skip unit test execution |
-| `SKIP_SONAR` | Boolean | `false` | Skip SonarQube analysis |
-| `RUN_SECURITY_SCAN` | Boolean | `true` | Run Trivy security scanning |
+| `TARGET_ENVIRONMENT` | Choice | `dev` | Target environment (dev/staging/prod) |
 | `TRIGGER_CD` | Boolean | `true` | Auto-trigger CD pipeline on success |
-| `TARGET_ENVIRONMENT` | Choice | `dev` | Target environment for CD trigger |
+
+> **Note**: All stages are mandatory - linting, tests, SonarQube analysis, and security scans run on every build.
 
 ### CD Pipeline Parameters
 

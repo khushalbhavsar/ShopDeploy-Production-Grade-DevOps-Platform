@@ -133,8 +133,8 @@ npm run preview
 # Build image
 docker build -t shopdeploy-frontend:latest .
 
-# Run container
-docker run -d -p 3000:80 shopdeploy-frontend:latest
+# Run container (uses nginx-unprivileged on port 8080)
+docker run -d -p 8080:8080 shopdeploy-frontend:latest
 ```
 
 ### Build & Push to ECR
@@ -152,11 +152,13 @@ docker push <ECR_URL>/shopdeploy-frontend:latest
 
 ### Production Configuration
 
-The Docker image uses Nginx to serve the built React application with:
+The Docker image uses **nginx-unprivileged** to serve the built React application as a non-root user (UID 101) with:
+- Runs on port **8080** (non-privileged port)
 - Gzip compression enabled
 - Client-side routing support (SPA fallback)
 - Security headers
 - Optimized caching for static assets
+- Non-root execution for enhanced security
 
 ### Kubernetes Health Probes
 
@@ -164,8 +166,16 @@ When deployed to Kubernetes, the frontend uses:
 
 | Probe Type | Path | Port | Purpose |
 |------------|------|------|----------|
-| **Liveness** | `/` | 80 | Check if Nginx is responding |
-| **Readiness** | `/` | 80 | Verify container is ready for traffic |
+| **Liveness** | `/` | 8080 | Check if Nginx is responding |
+| **Readiness** | `/` | 8080 | Verify container is ready for traffic |
+
+### Service Configuration
+
+| Environment | Service Type | Port | Target Port |
+|-------------|--------------|------|-------------|
+| **Dev** | LoadBalancer | 80 | 8080 |
+| **Staging** | LoadBalancer | 80 | 8080 |
+| **Production** | LoadBalancer | 80 | 8080 |
 
 ---
 
@@ -176,12 +186,22 @@ The frontend is built and deployed as part of the Jenkins pipeline:
 | Stage | Description |
 |-------|-------------|
 | **Install Dependencies** | `npm ci` with caching |
-| **Linting** | ESLint checks |
-| **Unit Tests** | Jest with coverage |
-| **Docker Build** | Multi-stage Dockerfile |
+| **Linting** | ESLint checks (mandatory) |
+| **Unit Tests** | Jest with coverage (mandatory) |
+| **SonarQube Analysis** | Code quality scan (gracefully skips if not configured) |
+| **Docker Build** | Multi-stage Dockerfile (nginx-unprivileged) |
 | **Security Scan** | Trivy vulnerability scan |
 | **Push to ECR** | AWS ECR registry |
-| **Helm Deploy** | Kubernetes deployment |
+| **Helm Deploy** | Kubernetes deployment with LoadBalancer |
+
+### Docker Configuration
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Base Image** | nginxinc/nginx-unprivileged:alpine | Non-root execution |
+| **Container Port** | 8080 | Unprivileged port |
+| **Service Port** | 80 | External access |
+| **User ID** | 101 | nginx user |
 
 --- 
 

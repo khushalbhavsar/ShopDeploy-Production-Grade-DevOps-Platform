@@ -42,6 +42,14 @@ Production-ready E-Commerce REST API built with Node.js, Express, and MongoDB. F
 | 📁 **File Upload** | Local storage for images |
 | ❤️ **Health Checks** | `/api/health/health` (liveness) & `/api/health/ready` (readiness) |
 
+### Service Configuration
+
+| Environment | Service Type | Port | Target Port |
+|-------------|--------------|------|-------------|
+| **Dev** | LoadBalancer | 5000 | 5000 |
+| **Staging** | LoadBalancer | 5000 | 5000 |
+| **Production** | LoadBalancer | 5000 | 5000 |
+
 ---
 
 ## 🛠️ Tech Stack
@@ -398,12 +406,13 @@ The backend is automatically built and deployed via Jenkins:
 | Stage | Description |
 |-------|-------------|
 | **Install Dependencies** | `npm ci` with caching |
-| **Linting** | Code quality checks |
-| **Unit Tests** | Jest with coverage |
+| **Linting** | ESLint checks (mandatory) |
+| **Unit Tests** | Jest with coverage (mandatory) |
+| **SonarQube Analysis** | Code quality scan (gracefully skips if not configured) |
 | **Docker Build** | Multi-stage Dockerfile |
-| **Security Scan** | Trivy vulnerability scan |
-| **Push to ECR** | AWS ECR registry |
-| **Helm Deploy** | Kubernetes deployment |
+| **Security Scan** | Trivy vulnerability scan (HIGH/CRITICAL) |
+| **Push to ECR** | AWS ECR registry with immutable tags |
+| **Helm Deploy** | Kubernetes deployment with LoadBalancer |
 
 ### Kubernetes Deployment
 
@@ -414,11 +423,15 @@ The backend is automatically built and deployed via Jenkins:
 # Manual Helm deployment
 helm upgrade --install shopdeploy-backend ./helm/backend \
   --namespace shopdeploy \
+  -f ./helm/backend/values-dev.yaml \
   --set image.repository=<ECR_URL>/shopdeploy-prod-backend \
   --set image.tag=latest
 
 # Check pod status
 kubectl get pods -n shopdeploy -l app=shopdeploy-backend
+
+# Get LoadBalancer URL
+kubectl get svc shopdeploy-backend -n shopdeploy
 ```
 
 ### Health Probes (Kubernetes)
@@ -427,6 +440,7 @@ kubectl get pods -n shopdeploy -l app=shopdeploy-backend
 |-------|----------|----------|
 | Liveness | `/api/health/health` | Restart if unhealthy |
 | Readiness | `/api/health/ready` | Remove from LB if not ready |
+| Startup | `/api/health/ready` | Initial startup check |
 
 ---
 
