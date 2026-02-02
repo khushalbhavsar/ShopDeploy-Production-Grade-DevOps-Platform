@@ -16,13 +16,8 @@
  */
 
 pipeline {
-    // Use dedicated Docker agent with all tools pre-installed
-    agent {
-        docker {
-            image 'khushal/devops-agent:latest'
-            args '-v /var/run/docker.sock:/var/run/docker.sock --user root'
-        }
-    }
+    // Run on Jenkins agent with Docker, kubectl, and Helm installed
+    agent any
 
     environment {
         // AWS Configuration
@@ -190,12 +185,16 @@ pipeline {
                     
                     echo approvalMessage
                     
-                    // Send Slack notification for approval request
-                    slackSend(
-                        channel: '#deployments',
-                        color: 'warning',
-                        message: "🔔 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
-                    )
+                    // Send Slack notification for approval request (optional)
+                    try {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'warning',
+                            message: "🔔 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
+                        )
+                    } catch (Exception e) {
+                        echo "⚠️ Slack notification skipped (not configured)"
+                    }
                     
                     timeout(time: 30, unit: 'MINUTES') {
                         input(
@@ -208,11 +207,15 @@ pipeline {
                     
                     echo "✅ Production deployment approved by ${env.APPROVER}"
                     
-                    slackSend(
-                        channel: '#deployments',
-                        color: 'good',
-                        message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
-                    )
+                    try {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'good',
+                            message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        )
+                    } catch (Exception e) {
+                        echo "⚠️ Slack notification skipped (not configured)"
+                    }
                 }
             }
         }
@@ -417,11 +420,15 @@ pipeline {
                     ╚═══════════════════════════════════════════════════════════╝
                     """
                     
-                    slackSend(
-                        channel: '#deployments',
-                        color: 'good',
-                        message: "✅ Deployed to ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG} | Duration: ${currentBuild.durationString}"
-                    )
+                    try {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'good',
+                            message: "✅ Deployed to ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG} | Duration: ${currentBuild.durationString}"
+                        )
+                    } catch (Exception e) {
+                        echo "⚠️ Slack notification skipped (not configured)"
+                    }
                 }
             }
         }
@@ -463,36 +470,52 @@ pipeline {
                             '''
                         }
                         
-                        slackSend(
-                            channel: '#deployments',
-                            color: 'warning',
-                            message: "🔄 Auto-rollback completed for ${params.ENVIRONMENT} | Failed Tag: ${env.DEPLOY_IMAGE_TAG}"
-                        )
+                        try {
+                            slackSend(
+                                channel: '#deployments',
+                                color: 'warning',
+                                message: "🔄 Auto-rollback completed for ${params.ENVIRONMENT} | Failed Tag: ${env.DEPLOY_IMAGE_TAG}"
+                            )
+                        } catch (Exception slackErr) {
+                            echo "⚠️ Slack notification skipped (not configured)"
+                        }
                     } catch (Exception e) {
                         echo "❌ Rollback failed: ${e.message}"
-                        slackSend(
-                            channel: '#deployments',
-                            color: 'danger',
-                            message: "🚨 CRITICAL: Rollback FAILED for ${params.ENVIRONMENT} | Manual intervention required!"
-                        )
+                        try {
+                            slackSend(
+                                channel: '#deployments',
+                                color: 'danger',
+                                message: "🚨 CRITICAL: Rollback FAILED for ${params.ENVIRONMENT} | Manual intervention required!"
+                            )
+                        } catch (Exception slackErr) {
+                            echo "⚠️ Slack notification skipped (not configured)"
+                        }
                     }
                 }
                 
-                slackSend(
-                    channel: '#deployments',
-                    color: 'danger',
-                    message: "❌ Deploy FAILED: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
-                )
+                try {
+                    slackSend(
+                        channel: '#deployments',
+                        color: 'danger',
+                        message: "❌ Deploy FAILED: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Slack notification skipped (not configured)"
+                }
             }
         }
 
         aborted {
             echo '🛑 CD Pipeline was aborted'
-            slackSend(
-                channel: '#deployments',
-                color: 'warning',
-                message: "🛑 Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
-            )
+            try {
+                slackSend(
+                    channel: '#deployments',
+                    color: 'warning',
+                    message: "🛑 Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                )
+            } catch (Exception e) {
+                echo "⚠️ Slack notification skipped (not configured)"
+            }
         }
 
         always {
