@@ -506,15 +506,17 @@ pipeline {
         }
 
         aborted {
-            echo '🛑 CD Pipeline was aborted'
-            try {
-                slackSend(
-                    channel: '#deployments',
-                    color: 'warning',
-                    message: "🛑 Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
-                )
-            } catch (Exception e) {
-                echo "⚠️ Slack notification skipped (not configured)"
+            script {
+                echo '🛑 CD Pipeline was aborted'
+                try {
+                    slackSend(
+                        channel: '#deployments',
+                        color: 'warning',
+                        message: "🛑 Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Slack notification skipped (not configured)"
+                }
             }
         }
 
