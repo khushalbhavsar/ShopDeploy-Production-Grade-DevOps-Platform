@@ -39,9 +39,6 @@ pipeline {
         FRONTEND_DIR = 'shopdeploy-frontend'
     }
 
-    tools {
-        nodejs 'NodeJS-18'
-    }
 
     options {
         timeout(time: 45, unit: 'MINUTES')
