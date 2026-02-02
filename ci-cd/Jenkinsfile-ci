@@ -215,22 +215,44 @@ pipeline {
             steps {
                 script {
                     echo 'Running SonarQube analysis...'
-                    // Check if sonar-scanner is available
-                    def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
-                    if (scannerAvailable) {
+                    
+                    // Try Jenkins SonarQube Scanner plugin first (recommended)
+                    try {
                         withSonarQubeEnv('SonarQube') {
+                            // Use Jenkins SonarQube Scanner tool if configured
+                            def scannerHome = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                             sh """
-                                sonar-scanner \
+                                ${scannerHome}/bin/sonar-scanner \
                                     -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                     -Dsonar.projectName=ShopDeploy \
-                                    -Dsonar.sources=. \
-                                    -Dsonar.exclusions=node_modules/**,**/test/**,**/coverage/**,**/*.spec.js \
-                                    -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info
+                                    -Dsonar.sources=shopdeploy-backend/src,shopdeploy-frontend/src \
+                                    -Dsonar.exclusions=**/node_modules/**,**/test/**,**/coverage/**,**/*.spec.js,**/dist/** \
+                                    -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info \
+                                    -Dsonar.qualitygate.wait=true
                             """
                         }
-                    } else {
-                        echo 'SonarQube Scanner not installed. Skipping analysis.'
-                        echo 'To install: https://docs.sonarqube.org/latest/analyzing-source-code/scanners/sonarscanner/'
+                    } catch (Exception e) {
+                        echo "SonarQube Scanner plugin not configured: ${e.message}"
+                        
+                        // Fallback: Check if sonar-scanner CLI is available
+                        def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
+                        if (scannerAvailable) {
+                            withSonarQubeEnv('SonarQube') {
+                                sh """
+                                    sonar-scanner \
+                                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                        -Dsonar.projectName=ShopDeploy \
+                                        -Dsonar.sources=shopdeploy-backend/src,shopdeploy-frontend/src \
+                                        -Dsonar.exclusions=**/node_modules/**,**/test/**,**/coverage/**,**/*.spec.js,**/dist/** \
+                                        -Dsonar.javascript.lcov.reportPaths=${BACKEND_DIR}/coverage/lcov.info,${FRONTEND_DIR}/coverage/lcov.info
+                                """
+                            }
+                        } else {
+                            echo 'SonarQube Scanner not configured. To enable:'
+                            echo '1. Install SonarQube Scanner plugin in Jenkins'
+                            echo '2. Configure SonarQube server in Jenkins > Manage Jenkins > Configure System'
+                            echo '3. Add SonarQube Scanner tool in Jenkins > Global Tool Configuration'
+                        }
                     }
                 }
             }
