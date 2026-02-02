@@ -72,18 +72,18 @@ pipeline {
         //======================================================================
         stage('Initialize') {
             steps {
-                echo '🚀 Initializing CD Pipeline...'
+                echo 'Initializing CD Pipeline...'
                 script {
                     // FIX 7: Environment-specific namespace
                     env.K8S_NAMESPACE = "shopdeploy-${params.ENVIRONMENT}"
-                    echo "📦 Target namespace: ${env.K8S_NAMESPACE}"
+                    echo "Target namespace: ${env.K8S_NAMESPACE}"
                     
                     // Get IMAGE_TAG from parameter or Parameter Store
                     if (params.IMAGE_TAG?.trim()) {
                         env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG.trim()
-                        echo "📦 Using provided IMAGE_TAG: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "Using provided IMAGE_TAG: ${env.DEPLOY_IMAGE_TAG}"
                     } else {
-                        echo "📦 Fetching latest IMAGE_TAG from Parameter Store..."
+                        echo "Fetching latest IMAGE_TAG from Parameter Store..."
                         withCredentials([
                             string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID'),
                             [$class: 'AmazonWebServicesCredentialsBinding',
@@ -104,12 +104,12 @@ pipeline {
                             // Set ECR_REGISTRY with account ID
                             env.ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
                         }
-                        echo "📦 Retrieved IMAGE_TAG from Parameter Store: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "Retrieved IMAGE_TAG from Parameter Store: ${env.DEPLOY_IMAGE_TAG}"
                     }
                     
                     // Validate IMAGE_TAG
                     if (!env.DEPLOY_IMAGE_TAG || env.DEPLOY_IMAGE_TAG == 'null') {
-                        error("❌ IMAGE_TAG is required. Please provide a valid image tag.")
+                        error("IMAGE_TAG is required. Please provide a valid image tag.")
                     }
                     
                     // Set ECR_REGISTRY if not already set (when IMAGE_TAG was provided)
@@ -123,16 +123,7 @@ pipeline {
                     env.BACKEND_IMAGE = "${env.ECR_REGISTRY}/${ECR_BACKEND_REPO}:${env.DEPLOY_IMAGE_TAG}"
                     env.FRONTEND_IMAGE = "${env.ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${env.DEPLOY_IMAGE_TAG}"
                     
-                    echo """
-                    ╔═══════════════════════════════════════════════════════════╗
-                    ║  📋 DEPLOYMENT CONFIGURATION                              ║
-                    ╠═══════════════════════════════════════════════════════════╣
-                    ║  Environment: ${params.ENVIRONMENT}                       
-                    ║  Namespace: ${env.K8S_NAMESPACE}                          
-                    ║  Image Tag: ${env.DEPLOY_IMAGE_TAG}                       
-                    ║  Dry Run: ${params.DRY_RUN}                               
-                    ╚═══════════════════════════════════════════════════════════╝
-                    """
+                    echo "Deployment Config - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Dry Run: ${params.DRY_RUN}"
                 }
             }
         }
@@ -142,28 +133,28 @@ pipeline {
         //======================================================================
         stage('Verify Tools') {
             steps {
-                echo '🔧 Verifying required tools...'
+                echo 'Verifying required tools...'
                 sh '''
                     echo "Checking required tools..."
                     echo "========================="
                     
-                    echo "🐳 Docker:"
+                    echo "Docker:"
                     docker --version
                     
                     echo "
-☁️ AWS CLI:"
+AWS CLI:"
                     aws --version
                     
                     echo "
-☸️ kubectl:"
-                    kubectl version --client || echo "⚠️ kubectl not available"
+kubectl:"
+                    kubectl version --client || echo "kubectl not available"
                     
                     echo "
-⚙️ Helm:"
-                    helm version --short || echo "⚠️ Helm not available"
+Helm:"
+                    helm version --short || echo "Helm not available"
                     
                     echo "
-✅ Tool verification complete"
+Tool verification complete"
                 '''
             }
         }
@@ -173,7 +164,7 @@ pipeline {
         //======================================================================
         stage('Verify Images') {
             steps {
-                echo '🔍 Verifying images exist in ECR...'
+                echo 'Verifying images exist in ECR...'
                 withCredentials([
                     [$class: 'AmazonWebServicesCredentialsBinding',
                      credentialsId: 'aws-credentials',
@@ -182,27 +173,27 @@ pipeline {
                 ]) {
                     sh '''
                         # Login to ECR (FIX 10: single login point)
-                        echo "🔐 Logging into ECR..."
+                        echo "Logging into ECR..."
                         aws ecr get-login-password --region us-east-1 | \
                             docker login --username AWS --password-stdin ${ECR_REGISTRY}
                         
                         # Verify backend image exists
-                        echo "🔍 Checking backend image..."
+                        echo "Checking backend image..."
                         aws ecr describe-images \
                             --repository-name ${ECR_BACKEND_REPO} \
                             --image-ids imageTag=${DEPLOY_IMAGE_TAG} \
                             --region us-east-1 > /dev/null || \
-                            { echo "❌ Backend image not found: ${DEPLOY_IMAGE_TAG}"; exit 1; }
-                        echo "✅ Backend image verified"
+                            { echo "Backend image not found: ${DEPLOY_IMAGE_TAG}"; exit 1; }
+                        echo "Backend image verified"
                         
                         # Verify frontend image exists
-                        echo "🔍 Checking frontend image..."
+                        echo "Checking frontend image..."
                         aws ecr describe-images \
                             --repository-name ${ECR_FRONTEND_REPO} \
                             --image-ids imageTag=${DEPLOY_IMAGE_TAG} \
                             --region us-east-1 > /dev/null || \
-                            { echo "❌ Frontend image not found: ${DEPLOY_IMAGE_TAG}"; exit 1; }
-                        echo "✅ Frontend image verified"
+                            { echo "Frontend image not found: ${DEPLOY_IMAGE_TAG}"; exit 1; }
+                        echo "Frontend image verified"
                     '''
                 }
             }
@@ -215,17 +206,17 @@ pipeline {
             steps {
                 script {
                     if (params.ENVIRONMENT == 'prod' && !params.DRY_RUN) {
-                        echo '⏳ Waiting for production deployment approval...'
+                        echo 'Waiting for production deployment approval...'
                         
                         def approvalMessage = """
-                        🚀 PRODUCTION DEPLOYMENT REQUEST
-                        ════════════════════════════════════════
+                        PRODUCTION DEPLOYMENT REQUEST
+                        ========================================
                         Image Tag: ${env.DEPLOY_IMAGE_TAG}
                         Backend: ${env.BACKEND_IMAGE}
                         Frontend: ${env.FRONTEND_IMAGE}
-                        ════════════════════════════════════════
+                        ========================================
                         
-                        ⚠️ This will deploy to PRODUCTION.
+                        This will deploy to PRODUCTION.
                         Please review and approve.
                         """
                         
@@ -236,7 +227,7 @@ pipeline {
                             slackSend(
                                 channel: '#deployments',
                                 color: 'warning',
-                                message: "🔔 Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
+                                message: "Production deployment approval needed | Tag: ${env.DEPLOY_IMAGE_TAG} | <${BUILD_URL}input|Approve/Reject>"
                             )
                         }
                         
@@ -249,18 +240,18 @@ pipeline {
                             )
                         }
                         
-                        echo "✅ Production deployment approved by ${env.APPROVER}"
+                        echo "Production deployment approved by ${env.APPROVER}"
                         
                         // FIX 8: Only send Slack if enabled
                         if (env.SLACK_ENABLED == 'true') {
                             slackSend(
                                 channel: '#deployments',
                                 color: 'good',
-                                message: "✅ Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                                message: "Production deployment approved by ${env.APPROVER} | Tag: ${env.DEPLOY_IMAGE_TAG}"
                             )
                         }
                     } else {
-                        echo "ℹ️ Production approval not required for ${params.ENVIRONMENT} environment"
+                        echo "Production approval not required for ${params.ENVIRONMENT} environment"
                     }
                 }
             }
@@ -273,11 +264,11 @@ pipeline {
             steps {
                 script {
                     if (params.DRY_RUN) {
-                        echo 'ℹ️ Dry run mode - skipping rollback info capture'
+                        echo 'Dry run mode - skipping rollback info capture'
                         env.BACKEND_REVISION = '0'
                         env.FRONTEND_REVISION = '0'
                     } else {
-                        echo '📸 Capturing current deployment state for rollback...'
+                        echo 'Capturing current deployment state for rollback...'
                         withCredentials([
                             [$class: 'AmazonWebServicesCredentialsBinding',
                              credentialsId: 'aws-credentials',
@@ -300,8 +291,8 @@ pipeline {
                                 returnStdout: true
                             ).trim()
                             
-                            echo "📋 Current backend revision: ${env.BACKEND_REVISION}"
-                            echo "📋 Current frontend revision: ${env.FRONTEND_REVISION}"
+                            echo "Current backend revision: ${env.BACKEND_REVISION}"
+                            echo "Current frontend revision: ${env.FRONTEND_REVISION}"
                         }
                     }
                 }
@@ -313,7 +304,7 @@ pipeline {
         //======================================================================
         stage('Deploy MongoDB') {
             steps {
-                echo "🍃 Deploying MongoDB to ${env.K8S_NAMESPACE}..."
+                echo "Deploying MongoDB to ${env.K8S_NAMESPACE}..."
                 withCredentials([
                     [$class: 'AmazonWebServicesCredentialsBinding',
                      credentialsId: 'aws-credentials',
@@ -322,7 +313,7 @@ pipeline {
                 ]) {
                     script {
                         if (params.DRY_RUN) {
-                            echo 'ℹ️ Dry run mode - skipping MongoDB deployment'
+                            echo 'Dry run mode - skipping MongoDB deployment'
                         } else {
                             sh """
                                 # Configure kubectl for EKS
@@ -333,20 +324,20 @@ pipeline {
                                 
                                 # Check if MongoDB already exists and is running
                                 if kubectl get deployment mongodb -n ${env.K8S_NAMESPACE} 2>/dev/null | grep -q "1/1"; then
-                                    echo "✅ MongoDB already running in ${env.K8S_NAMESPACE}"
+                                    echo "MongoDB already running in ${env.K8S_NAMESPACE}"
                                 else
-                                    echo "📦 Deploying MongoDB from k8s-reference/mongodb-deployment.yaml..."
+                                    echo "Deploying MongoDB from k8s-reference/mongodb-deployment.yaml..."
                                     kubectl apply -f ./k8s-reference/mongodb-deployment.yaml -n ${env.K8S_NAMESPACE}
                                     
                                     # Wait for MongoDB to be ready
-                                    echo "⏳ Waiting for MongoDB to be ready..."
+                                    echo "Waiting for MongoDB to be ready..."
                                     kubectl rollout status deployment/mongodb -n ${env.K8S_NAMESPACE} --timeout=120s
                                 fi
                                 
                                 # Verify MongoDB is running
-                                echo "🔍 MongoDB Status:"
+                                echo "MongoDB Status:"
                                 kubectl get pods -n ${env.K8S_NAMESPACE} -l app=mongodb
-                                echo "✅ MongoDB is ready"
+                                echo "MongoDB is ready"
                             """
                         }
                     }
@@ -359,7 +350,7 @@ pipeline {
         //======================================================================
         stage('Deploy') {
             steps {
-                echo "🚀 Deploying to ${params.ENVIRONMENT}..."
+                echo "Deploying to ${params.ENVIRONMENT}..."
                 withCredentials([
                     [$class: 'AmazonWebServicesCredentialsBinding',
                      credentialsId: 'aws-credentials',
@@ -378,7 +369,7 @@ pipeline {
                         """
                         
                         // Deploy backend
-                        echo "📦 Deploying backend..."
+                        echo "Deploying backend..."
                         def backendResult = sh(
                             script: """
                                 helm upgrade --install shopdeploy-backend ./helm/backend \
@@ -395,7 +386,7 @@ pipeline {
                         )
                         
                         if (backendResult != 0) {
-                            echo "❌ Backend deployment failed. Gathering diagnostics..."
+                            echo "Backend deployment failed. Gathering diagnostics..."
                             sh """
                                 echo "=== POD STATUS ==="
                                 kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-backend -o wide || true
@@ -416,7 +407,7 @@ pipeline {
                         }
                         
                         // Deploy frontend
-                        echo "🎨 Deploying frontend..."
+                        echo "Deploying frontend..."
                         def frontendResult = sh(
                             script: """
                                 helm upgrade --install shopdeploy-frontend ./helm/frontend \
@@ -433,7 +424,7 @@ pipeline {
                         )
                         
                         if (frontendResult != 0) {
-                            echo "❌ Frontend deployment failed. Gathering diagnostics..."
+                            echo "Frontend deployment failed. Gathering diagnostics..."
                             sh """
                                 echo "=== POD STATUS ==="
                                 kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-frontend -o wide || true
@@ -450,7 +441,7 @@ pipeline {
                             error("Frontend deployment failed - see diagnostics above")
                         }
                         
-                        echo "✅ Deployment completed"
+                        echo "Deployment completed"
                     }
                 }
             }
@@ -463,11 +454,11 @@ pipeline {
             steps {
                 script {
                     if (params.SKIP_SMOKE_TESTS) {
-                        echo 'ℹ️ Smoke tests skipped by user request'
+                        echo 'Smoke tests skipped by user request'
                     } else if (params.DRY_RUN) {
-                        echo 'ℹ️ Dry run mode - skipping smoke tests'
+                        echo 'Dry run mode - skipping smoke tests'
                     } else {
-                        echo '🔬 Running smoke tests...'
+                        echo 'Running smoke tests...'
                         withCredentials([
                             [$class: 'AmazonWebServicesCredentialsBinding',
                              credentialsId: 'aws-credentials',
@@ -478,30 +469,30 @@ pipeline {
                                 # Configure kubectl
                                 aws eks update-kubeconfig --region us-east-1 --name ${EKS_CLUSTER_NAME}
                                 
-                                echo "📋 Checking deployment status..."
+                                echo "Checking deployment status..."
                                 
                                 # Check pod status
-                                echo "🔍 Pod Status:"
+                                echo "Pod Status:"
                                 kubectl get pods -n ${env.K8S_NAMESPACE} -o wide
                                 
                                 # Wait for backend rollout
-                                echo "⏳ Waiting for backend rollout..."
+                                echo "Waiting for backend rollout..."
                                 kubectl rollout status deployment/shopdeploy-backend -n ${env.K8S_NAMESPACE} --timeout=300s
                                 
                                 # Wait for frontend rollout
-                                echo "⏳ Waiting for frontend rollout..."
+                                echo "Waiting for frontend rollout..."
                                 kubectl rollout status deployment/shopdeploy-frontend -n ${env.K8S_NAMESPACE} --timeout=300s
                                 
                                 # Get service endpoints
-                                echo "🌐 Service Endpoints:"
+                                echo "Service Endpoints:"
                                 kubectl get svc -n ${env.K8S_NAMESPACE}
                                 
                                 # Get ingress
-                                echo "🚪 Ingress:"
+                                echo "Ingress:"
                                 kubectl get ingress -n ${env.K8S_NAMESPACE} || echo "No ingress configured"
                                 
                                 # Verify pods are running
-                                echo "🏥 Health check..."
+                                echo "Health check..."
                                 # Use correct Helm labels (app.kubernetes.io/name)
                                 BACKEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-backend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
                                 FRONTEND_READY=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app.kubernetes.io/name=shopdeploy-frontend -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
@@ -510,14 +501,14 @@ pipeline {
                                 echo "Frontend ready status: \$FRONTEND_READY"
                                 
                                 if [[ "\$BACKEND_READY" == *"True"* ]] && [[ "\$FRONTEND_READY" == *"True"* ]]; then
-                                    echo "✅ All pods are healthy"
+                                    echo "All pods are healthy"
                                 else
-                                    echo "❌ Some pods are not ready"
+                                    echo "Some pods are not ready"
                                     kubectl describe pods -n ${env.K8S_NAMESPACE}
                                     exit 1
                                 fi
                                 
-                                echo "✅ Smoke tests passed"
+                                echo "Smoke tests passed"
                             """
                         }
                     }
@@ -532,18 +523,19 @@ pipeline {
             steps {
                 script {
                     if (params.ENVIRONMENT == 'prod') {
-                        echo 'ℹ️ Integration tests skipped for production environment'
+                        echo 'Integration tests skipped for production environment'
                     } else if (params.DRY_RUN) {
-                        echo 'ℹ️ Dry run mode - skipping integration tests'
+                        echo 'Dry run mode - skipping integration tests'
                     } else {
-                        echo '🧪 Running integration tests...'
+                        echo 'Running integration tests...'
                         def integrationTestFile = "shopdeploy-backend/tests/integration.test.js"
                         if (fileExists(integrationTestFile)) {
                             dir("shopdeploy-backend") {
-                                sh 'npm run test:integration || echo "⚠️ Some integration tests failed"'
+                                sh 'npm run test:integration || echo "Some integration tests failed"'
                             }
                         } else {
-                            echo 'ℹ️ No integration tests found, skipping...'
+                            echo 'No integration tests found, skipping...'
+                        }
                         }
                     }
                 }
@@ -558,28 +550,19 @@ pipeline {
         success {
             script {
                 if (params.DRY_RUN) {
-                    echo "✅ Dry run completed successfully"
+                    echo "Dry run completed successfully"
                 } else {
-                    echo """
-                    ╔═══════════════════════════════════════════════════════════╗
-                    ║  ✅ CD PIPELINE COMPLETED SUCCESSFULLY                    ║
-                    ╠═══════════════════════════════════════════════════════════╣
-                    ║  Environment: ${params.ENVIRONMENT}                       
-                    ║  Namespace: ${env.K8S_NAMESPACE}                          
-                    ║  Image Tag: ${env.DEPLOY_IMAGE_TAG}                       
-                    ║  Duration: ${currentBuild.durationString}                 
-                    ╚═══════════════════════════════════════════════════════════╝
-                    """
+                    echo "CD Pipeline completed successfully - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Duration: ${currentBuild.durationString}"
                     
                     // FIX 8: Only send Slack if enabled
                     if (env.SLACK_ENABLED == 'true') {
                         slackSend(
                             channel: '#deployments',
                             color: 'good',
-                            message: "✅ Deployed to ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Duration: ${currentBuild.durationString}"
+                            message: "Deployed to ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Duration: ${currentBuild.durationString}"
                         )
                     } else {
-                        echo "📢 Slack not configured — skipping notification"
+                        echo "Slack not configured - skipping notification"
                     }
                 }
             }
@@ -587,16 +570,7 @@ pipeline {
 
         failure {
             script {
-                echo """
-                ╔═══════════════════════════════════════════════════════════╗
-                ║  ❌ CD PIPELINE FAILED                                    ║
-                ╠═══════════════════════════════════════════════════════════╣
-                ║  Environment: ${params.ENVIRONMENT}                       
-                ║  Namespace: ${env.K8S_NAMESPACE}                          
-                ║  Image Tag: ${env.DEPLOY_IMAGE_TAG}                       
-                ║  Stage: ${env.STAGE_NAME}                                 
-                ╚═══════════════════════════════════════════════════════════╝
-                """
+                echo "CD Pipeline failed - Environment: ${params.ENVIRONMENT}, Namespace: ${env.K8S_NAMESPACE}, Image Tag: ${env.DEPLOY_IMAGE_TAG}, Stage: ${env.STAGE_NAME}"
                 
                 // Note: With --atomic flag, Helm auto-rollback is handled automatically
                 // Manual rollback code removed as it's now redundant (FIX 6)
@@ -606,26 +580,26 @@ pipeline {
                     slackSend(
                         channel: '#deployments',
                         color: 'danger',
-                        message: "❌ Deploy FAILED: ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
+                        message: "Deploy FAILED: ${params.ENVIRONMENT} | Namespace: ${env.K8S_NAMESPACE} | Tag: ${env.DEPLOY_IMAGE_TAG} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
                     )
                 } else {
-                    echo "📢 Slack not configured — skipping notification"
+                    echo "Slack not configured - skipping notification"
                 }
             }
         }
 
         aborted {
             script {
-                echo '🛑 CD Pipeline was aborted'
+                echo 'CD Pipeline was aborted'
                 // FIX 8: Only send Slack if enabled
                 if (env.SLACK_ENABLED == 'true') {
                     slackSend(
                         channel: '#deployments',
                         color: 'warning',
-                        message: "🛑 Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        message: "Deployment aborted: ${params.ENVIRONMENT} | Tag: ${env.DEPLOY_IMAGE_TAG}"
                     )
                 } else {
-                    echo "📢 Slack not configured — skipping notification"
+                    echo "Slack not configured - skipping notification"
                 }
             }
         }

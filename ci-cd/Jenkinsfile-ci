@@ -70,7 +70,7 @@ pipeline {
         //======================================================================
         stage('Checkout') {
             steps {
-                echo '🔄 Checking out source code...'
+                echo 'Checking out source code...'
                 checkout scm
                 
                 script {
@@ -83,9 +83,9 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     
-                    echo "📝 Commit: ${env.GIT_COMMIT_MSG}"
-                    echo "👤 Author: ${env.GIT_AUTHOR}"
-                    echo "🏷️ Image Tag: ${IMAGE_TAG}"
+                    echo "Commit: ${env.GIT_COMMIT_MSG}"
+                    echo "Author: ${env.GIT_AUTHOR}"
+                    echo "Image Tag: ${IMAGE_TAG}"
                 }
             }
         }
@@ -96,7 +96,7 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
-                    echo '🔍 Detecting code changes...'
+                    echo 'Detecting code changes...'
                     
                     def backendChanges = sh(
                         script: "git diff --name-only HEAD~1 HEAD -- ${BACKEND_DIR}/ || echo 'initial'",
@@ -111,8 +111,8 @@ pipeline {
                     env.BACKEND_CHANGED = (backendChanges != '') ? 'true' : 'false'
                     env.FRONTEND_CHANGED = (frontendChanges != '') ? 'true' : 'false'
                     
-                    echo "📦 Backend changed: ${env.BACKEND_CHANGED}"
-                    echo "🎨 Frontend changed: ${env.FRONTEND_CHANGED}"
+                    echo "Backend changed: ${env.BACKEND_CHANGED}"
+                    echo "Frontend changed: ${env.FRONTEND_CHANGED}"
                 }
             }
         }
@@ -125,10 +125,10 @@ pipeline {
                 stage('Backend Dependencies') {
                     steps {
                         dir("${BACKEND_DIR}") {
-                            echo '📦 Installing backend dependencies...'
+                            echo 'Installing backend dependencies...'
                             sh '''
                                 npm ci --prefer-offline --no-audit
-                                echo "✅ Backend dependencies installed"
+                                echo "Backend dependencies installed"
                             '''
                         }
                     }
@@ -137,10 +137,10 @@ pipeline {
                 stage('Frontend Dependencies') {
                     steps {
                         dir("${FRONTEND_DIR}") {
-                            echo '📦 Installing frontend dependencies...'
+                            echo 'Installing frontend dependencies...'
                             sh '''
                                 npm ci --prefer-offline --no-audit
-                                echo "✅ Frontend dependencies installed"
+                                echo "Frontend dependencies installed"
                             '''
                         }
                     }
@@ -156,8 +156,8 @@ pipeline {
                 stage('Backend Lint') {
                     steps {
                         dir("${BACKEND_DIR}") {
-                            echo '🔍 Linting backend code...'
-                            sh 'npm run lint || echo "⚠️ Lint warnings found"'
+                            echo 'Linting backend code...'
+                            sh 'npm run lint || echo "Lint warnings found"'
                         }
                     }
                 }
@@ -165,8 +165,8 @@ pipeline {
                 stage('Frontend Lint') {
                     steps {
                         dir("${FRONTEND_DIR}") {
-                            echo '🔍 Linting frontend code...'
-                            sh 'npm run lint || echo "⚠️ Lint warnings found"'
+                            echo 'Linting frontend code...'
+                            sh 'npm run lint || echo "Lint warnings found"'
                         }
                     }
                 }
@@ -181,8 +181,8 @@ pipeline {
                 stage('Backend Tests') {
                     steps {
                         dir("${BACKEND_DIR}") {
-                            echo '🧪 Running backend tests...'
-                            sh 'npm test -- --coverage --passWithNoTests || echo "⚠️ Some tests failed"'
+                            echo 'Running backend tests...'
+                            sh 'npm test -- --coverage --passWithNoTests || echo "Some tests failed"'
                         }
                     }
                     post {
@@ -195,8 +195,8 @@ pipeline {
                 stage('Frontend Tests') {
                     steps {
                         dir("${FRONTEND_DIR}") {
-                            echo '🧪 Running frontend tests...'
-                            sh 'npm test -- --coverage --passWithNoTests || echo "⚠️ Some tests failed"'
+                            echo 'Running frontend tests...'
+                            sh 'npm test -- --coverage --passWithNoTests || echo "Some tests failed"'
                         }
                     }
                     post {
@@ -214,7 +214,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    echo '📊 Running SonarQube analysis...'
+                    echo 'Running SonarQube analysis...'
                     // Check if sonar-scanner is available
                     def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
                     if (scannerAvailable) {
@@ -229,8 +229,8 @@ pipeline {
                             """
                         }
                     } else {
-                        echo '⚠️ SonarQube Scanner not installed. Skipping analysis.'
-                        echo '💡 To install: https://docs.sonarqube.org/latest/analyzing-source-code/scanners/sonarscanner/'
+                        echo 'SonarQube Scanner not installed. Skipping analysis.'
+                        echo 'To install: https://docs.sonarqube.org/latest/analyzing-source-code/scanners/sonarscanner/'
                     }
                 }
             }
@@ -242,14 +242,14 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    echo '🚦 Checking Quality Gate...'
+                    echo 'Checking Quality Gate...'
                     def scannerAvailable = sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
                     if (scannerAvailable) {
                         timeout(time: 5, unit: 'MINUTES') {
                             waitForQualityGate abortPipeline: true
                         }
                     } else {
-                        echo '⚠️ Skipping Quality Gate (SonarQube Scanner not available)'
+                        echo 'Skipping Quality Gate (SonarQube Scanner not available)'
                     }
                 }
             }
@@ -262,7 +262,7 @@ pipeline {
             parallel {
                 stage('Build Backend Image') {
                     steps {
-                        echo '🐳 Building backend Docker image...'
+                        echo 'Building backend Docker image...'
                         withCredentials([[
                             $class: 'AmazonWebServicesCredentialsBinding',
                             credentialsId: 'aws-credentials',
@@ -292,7 +292,7 @@ pipeline {
 
                 stage('Build Frontend Image') {
                     steps {
-                        echo '🐳 Building frontend Docker image...'
+                        echo 'Building frontend Docker image...'
                         withCredentials([[
                             $class: 'AmazonWebServicesCredentialsBinding',
                             credentialsId: 'aws-credentials',
@@ -334,12 +334,12 @@ pipeline {
             parallel {
                 stage('Scan Backend Image') {
                     steps {
-                        echo '🔒 Scanning backend image for vulnerabilities...'
+                        echo 'Scanning backend image for vulnerabilities...'
                         sh '''
                             if command -v trivy &> /dev/null; then
                                 trivy image --severity HIGH,CRITICAL --exit-code 0 --format table shopdeploy-backend:${IMAGE_TAG} || true
                             else
-                                echo "⚠️ Trivy not available. Skipping security scan."
+                                echo "Trivy not available. Skipping security scan."
                             fi
                         '''
                     }
@@ -347,12 +347,12 @@ pipeline {
 
                 stage('Scan Frontend Image') {
                     steps {
-                        echo '🔒 Scanning frontend image for vulnerabilities...'
+                        echo 'Scanning frontend image for vulnerabilities...'
                         sh '''
                             if command -v trivy &> /dev/null; then
                                 trivy image --severity HIGH,CRITICAL --exit-code 0 --format table shopdeploy-frontend:${IMAGE_TAG} || true
                             else
-                                echo "⚠️ Trivy not available. Skipping security scan."
+                                echo "Trivy not available. Skipping security scan."
                             fi
                         '''
                     }
@@ -365,7 +365,7 @@ pipeline {
         //======================================================================
         stage('Push to ECR') {
             steps {
-                echo '🚀 Pushing images to AWS ECR...'
+                echo 'Pushing images to AWS ECR...'
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials',
@@ -383,7 +383,7 @@ pipeline {
                         sh '''
                             docker tag shopdeploy-backend:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${IMAGE_TAG}
                             docker push ${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${IMAGE_TAG}
-                            echo "✅ Backend pushed: ${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${IMAGE_TAG}"
+                            echo "Backend pushed: ${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${IMAGE_TAG}"
                         '''
                     }
                     
@@ -392,7 +392,7 @@ pipeline {
                         sh '''
                             docker tag shopdeploy-frontend:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${IMAGE_TAG}
                             docker push ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${IMAGE_TAG}
-                            echo "✅ Frontend pushed: ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${IMAGE_TAG}"
+                            echo "Frontend pushed: ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${IMAGE_TAG}"
                         '''
                     }
                 }
@@ -404,7 +404,7 @@ pipeline {
         //======================================================================
         stage('Save Image Tag') {
             steps {
-                echo '💾 Saving image tag for CD pipeline...'
+                echo 'Saving image tag for CD pipeline...'
                 script {
                     // Save to file for artifact
                     writeFile file: 'image-tag.txt', text: IMAGE_TAG
@@ -440,11 +440,11 @@ pipeline {
                                 --value "${IMAGE_TAG}" \
                                 --type String \
                                 --overwrite \
-                                --region ${AWS_REGION} || echo "⚠️ Failed to update Parameter Store"
+                                --region ${AWS_REGION} || echo "Failed to update Parameter Store"
                         """
                     }
                     
-                    echo "✅ Image tag saved: ${IMAGE_TAG}"
+                    echo "Image tag saved: ${IMAGE_TAG}"
                 }
             }
         }
@@ -454,14 +454,14 @@ pipeline {
         //======================================================================
         stage('Cleanup') {
             steps {
-                echo '🧹 Cleaning up local images...'
+                echo 'Cleaning up local images...'
                 sh """
                     docker rmi shopdeploy-backend:${IMAGE_TAG} || true
                     docker rmi shopdeploy-frontend:${IMAGE_TAG} || true
                     docker rmi ${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${IMAGE_TAG} || true
                     docker rmi ${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${IMAGE_TAG} || true
                     docker image prune -f || true
-                    echo "✅ Cleanup completed"
+                    echo "Cleanup completed"
                 """
             }
         }
@@ -473,32 +473,23 @@ pipeline {
     post {
         success {
             script {
-                echo """
-                ╔═══════════════════════════════════════════════════════════╗
-                ║  ✅ CI PIPELINE COMPLETED SUCCESSFULLY                    ║
-                ╠═══════════════════════════════════════════════════════════╣
-                ║  Build: #${BUILD_NUMBER}                                  
-                ║  Image Tag: ${IMAGE_TAG}                                  
-                ║  Duration: ${currentBuild.durationString}                 
-                ║  Target Environment: ${params.TARGET_ENVIRONMENT}         
-                ╚═══════════════════════════════════════════════════════════╝
-                """
+                echo "CI Pipeline completed successfully - Build #${BUILD_NUMBER}, Image Tag: ${IMAGE_TAG}, Duration: ${currentBuild.durationString}"
                 
                 // Slack notification (optional - skip if not configured)
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'good',
-                        message: "✅ CI Build Success | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG} | Duration: ${currentBuild.durationString}"
+                        message: "CI Build Success | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG} | Duration: ${currentBuild.durationString}"
                     )
                 } catch (Exception e) {
-                    echo "⚠️ Slack notification skipped (not configured)"
+                    echo "Slack notification skipped (not configured)"
                 }
                 
                 // Trigger CD pipeline if enabled and exists
                 if (params.TRIGGER_CD) {
                     try {
-                        echo "🚀 Triggering CD pipeline for ${params.TARGET_ENVIRONMENT}..."
+                        echo "Triggering CD pipeline for ${params.TARGET_ENVIRONMENT}..."
                         build job: 'shopdeploy-cd',
                             parameters: [
                                 string(name: 'IMAGE_TAG', value: IMAGE_TAG),
@@ -506,8 +497,8 @@ pipeline {
                             ],
                             wait: false  // Don't wait for CD to complete
                     } catch (Exception e) {
-                        echo "⚠️ CD pipeline 'shopdeploy-cd' not found. Create the CD pipeline job first."
-                        echo "💡 Image tag ${IMAGE_TAG} is saved and can be used for manual deployment."
+                        echo "CD pipeline 'shopdeploy-cd' not found. Create the CD pipeline job first."
+                        echo "Image tag ${IMAGE_TAG} is saved and can be used for manual deployment."
                     }
                 }
             }
@@ -515,41 +506,33 @@ pipeline {
 
         failure {
             script {
-                echo """
-                ╔═══════════════════════════════════════════════════════════╗
-                ║  ❌ CI PIPELINE FAILED                                    ║
-                ╠═══════════════════════════════════════════════════════════╣
-                ║  Build: #${BUILD_NUMBER}                                  
-                ║  Stage: ${env.STAGE_NAME}                                 
-                ║  Check logs for details                                   
-                ╚═══════════════════════════════════════════════════════════╝
-                """
+                echo "CI Pipeline failed - Build #${BUILD_NUMBER}, Stage: ${env.STAGE_NAME}"
                 
                 // Slack notification (optional - skip if not configured)
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'danger',
-                        message: "❌ CI Build FAILED | Build #${BUILD_NUMBER} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
+                        message: "CI Build FAILED | Build #${BUILD_NUMBER} | Stage: ${env.STAGE_NAME} | <${BUILD_URL}|View Logs>"
                     )
                 } catch (Exception e) {
-                    echo "⚠️ Slack notification skipped (not configured)"
+                    echo "Slack notification skipped (not configured)"
                 }
             }
         }
 
         unstable {
-            echo '⚠️ CI Pipeline completed with warnings (unstable)'
+            echo 'CI Pipeline completed with warnings (unstable)'
             // Slack notification (optional - skip if not configured)
             script {
                 try {
                     slackSend(
                         channel: '#deployments',
                         color: 'warning',
-                        message: "⚠️ CI Build Unstable | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
+                        message: "CI Build Unstable | Build #${BUILD_NUMBER} | Tag: ${IMAGE_TAG}"
                     )
                 } catch (Exception e) {
-                    echo "⚠️ Slack notification skipped (not configured)"
+                    echo "Slack notification skipped (not configured)"
                 }
             }
         }
