@@ -18,18 +18,41 @@ pipeline {
     agent any
 
     environment {
+        // ═══════════════════════════════════════════════════════════
         // Git Configuration
+        // ═══════════════════════════════════════════════════════════
         GITOPS_REPO = 'https://github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git'
         GITOPS_BRANCH = 'main'
         
+        // ═══════════════════════════════════════════════════════════
         // AWS Configuration
+        // ═══════════════════════════════════════════════════════════
         AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        
+        // ═══════════════════════════════════════════════════════════
+        // ECR Configuration
+        // ═══════════════════════════════════════════════════════════
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_BACKEND_REPO = 'shopdeploy-prod-backend'
+        ECR_FRONTEND_REPO = 'shopdeploy-prod-frontend'
+        
+        // ═══════════════════════════════════════════════════════════
+        // EKS Configuration
+        // ═══════════════════════════════════════════════════════════
+        EKS_CLUSTER_NAME = 'shopdeploy-prod-eks'
+        
+        // ═══════════════════════════════════════════════════════════
+        // Slack Integration (set to 'true' when configured)
+        // ═══════════════════════════════════════════════════════════
+        SLACK_ENABLED = 'false'
     }
 
     options {
-        timeout(time: 10, unit: 'MINUTES')
+        timeout(time: 15, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '30'))
         timestamps()
+        disableConcurrentBuilds()
     }
 
     parameters {
@@ -41,7 +64,7 @@ pipeline {
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
-            description: '🏷️ Docker image tag to deploy (e.g., 42-a1b2c3d)'
+            description: '🏷️ Docker image tag to deploy (e.g., 42-a1b2c3d). Leave empty to fetch latest from AWS SSM.'
         )
         string(
             name: 'BACKEND_IMAGE_TAG',
@@ -53,38 +76,81 @@ pipeline {
             defaultValue: '',
             description: '🎨 Frontend image tag (if different from IMAGE_TAG)'
         )
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: '🧪 Perform dry-run without pushing changes'
+        )
     }
 
     stages {
         //======================================================================
-        // Stage 1: Validate Parameters
+        // Stage 1: Environment Setup
+        //======================================================================
+        stage('Environment Setup') {
+            steps {
+                script {
+                    // Set environment-specific variables
+                    switch(params.ENVIRONMENT) {
+                        case 'prod':
+                            env.ENV_EMOJI = '🔴'
+                            env.ENV_COLOR = 'danger'
+                            env.K8S_NAMESPACE = 'shopdeploy-prod'
+                            env.API_URL = 'https://api.shopdeploy.com/api'
+                            env.FRONTEND_URL = 'https://shopdeploy.com'
+                            env.REPLICAS = '3'
+                            env.REQUIRE_APPROVAL = 'true'
+                            break
+                        case 'staging':
+                            env.ENV_EMOJI = '🟡'
+                            env.ENV_COLOR = 'warning'
+                            env.K8S_NAMESPACE = 'shopdeploy-staging'
+                            env.API_URL = 'https://api-staging.shopdeploy.com/api'
+                            env.FRONTEND_URL = 'https://staging.shopdeploy.com'
+                            env.REPLICAS = '2'
+                            env.REQUIRE_APPROVAL = 'false'
+                            break
+                        case 'dev':
+                        default:
+                            env.ENV_EMOJI = '🟢'
+                            env.ENV_COLOR = 'good'
+                            env.K8S_NAMESPACE = 'shopdeploy-dev'
+                            env.API_URL = 'https://api-dev.shopdeploy.com/api'
+                            env.FRONTEND_URL = 'https://dev.shopdeploy.com'
+                            env.REPLICAS = '1'
+                            env.REQUIRE_APPROVAL = 'false'
+                            break
+                    }
+                    
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "${env.ENV_EMOJI} GITOPS PIPELINE - ${params.ENVIRONMENT.toUpperCase()}"
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "Namespace: ${env.K8S_NAMESPACE}"
+                    echo "API URL: ${env.API_URL}"
+                    echo "Frontend URL: ${env.FRONTEND_URL}"
+                    echo "Replicas: ${env.REPLICAS}"
+                    if (params.DRY_RUN) {
+                        echo "⚠️ DRY RUN MODE - No changes will be pushed"
+                    }
+                    echo "═══════════════════════════════════════════════════════════"
+                }
+            }
+        }
+
+        //======================================================================
+        // Stage 2: Validate & Get Image Tags
         //======================================================================
         stage('Validate') {
             steps {
                 script {
-                    // Set environment emoji
-                    switch(params.ENVIRONMENT) {
-                        case 'prod':
-                            env.ENV_EMOJI = '🔴'
-                            break
-                        case 'staging':
-                            env.ENV_EMOJI = '🟡'
-                            break
-                        default:
-                            env.ENV_EMOJI = '🟢'
-                            break
-                    }
-
-                    echo "═══════════════════════════════════════════════════════════"
-                    echo "${env.ENV_EMOJI} GITOPS PIPELINE - ${params.ENVIRONMENT.toUpperCase()}"
-                    echo "═══════════════════════════════════════════════════════════"
-
                     // Determine image tags
                     if (params.IMAGE_TAG?.trim()) {
                         env.BACKEND_TAG = params.BACKEND_IMAGE_TAG?.trim() ?: params.IMAGE_TAG.trim()
                         env.FRONTEND_TAG = params.FRONTEND_IMAGE_TAG?.trim() ?: params.IMAGE_TAG.trim()
+                        echo "Using provided IMAGE_TAG: ${params.IMAGE_TAG}"
                     } else {
-                        // Fetch from Parameter Store
+                        // Fetch from AWS Parameter Store
+                        echo "Fetching latest IMAGE_TAG from AWS Parameter Store..."
                         withCredentials([[
                             $class: 'AmazonWebServicesCredentialsBinding',
                             credentialsId: 'aws-credentials',
@@ -97,62 +163,166 @@ pipeline {
                                         --name "/shopdeploy/latest-image-tag" \
                                         --query 'Parameter.Value' \
                                         --output text \
-                                        --region us-east-1
+                                        --region ${AWS_REGION}
                                 ''',
                                 returnStdout: true
                             ).trim()
                             env.FRONTEND_TAG = env.BACKEND_TAG
                         }
+                        echo "Retrieved IMAGE_TAG from Parameter Store: ${env.BACKEND_TAG}"
                     }
 
-                    if (!env.BACKEND_TAG || !env.FRONTEND_TAG) {
-                        error("❌ Image tag is required!")
+                    // Validate tags
+                    if (!env.BACKEND_TAG || !env.FRONTEND_TAG || env.BACKEND_TAG == 'null') {
+                        error("❌ Image tag is required! Please provide IMAGE_TAG or ensure SSM parameter exists.")
                     }
 
+                    // Set full image URLs
+                    env.BACKEND_IMAGE = "${ECR_REGISTRY}/${ECR_BACKEND_REPO}:${env.BACKEND_TAG}"
+                    env.FRONTEND_IMAGE = "${ECR_REGISTRY}/${ECR_FRONTEND_REPO}:${env.FRONTEND_TAG}"
+
+                    echo "═══════════════════════════════════════════════════════════"
+                    echo "📦 Image Configuration:"
+                    echo "═══════════════════════════════════════════════════════════"
                     echo "Backend Tag: ${env.BACKEND_TAG}"
                     echo "Frontend Tag: ${env.FRONTEND_TAG}"
+                    echo "Backend Image: ${env.BACKEND_IMAGE}"
+                    echo "Frontend Image: ${env.FRONTEND_IMAGE}"
+                    echo "═══════════════════════════════════════════════════════════"
                 }
             }
         }
 
         //======================================================================
-        // Stage 2: Production Approval Gate
+        // Stage 3: Verify Images Exist in ECR
+        //======================================================================
+        stage('Verify Images') {
+            steps {
+                echo "🔍 Verifying images exist in ECR..."
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    script {
+                        // Verify backend image
+                        def backendExists = sh(
+                            script: """
+                                aws ecr describe-images \
+                                    --repository-name ${ECR_BACKEND_REPO} \
+                                    --image-ids imageTag=${env.BACKEND_TAG} \
+                                    --region ${AWS_REGION} > /dev/null 2>&1 && echo "true" || echo "false"
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (backendExists != 'true') {
+                            error("❌ Backend image not found in ECR: ${env.BACKEND_TAG}")
+                        }
+                        echo "✅ Backend image verified: ${env.BACKEND_TAG}"
+                        
+                        // Verify frontend image
+                        def frontendExists = sh(
+                            script: """
+                                aws ecr describe-images \
+                                    --repository-name ${ECR_FRONTEND_REPO} \
+                                    --image-ids imageTag=${env.FRONTEND_TAG} \
+                                    --region ${AWS_REGION} > /dev/null 2>&1 && echo "true" || echo "false"
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (frontendExists != 'true') {
+                            error("❌ Frontend image not found in ECR: ${env.FRONTEND_TAG}")
+                        }
+                        echo "✅ Frontend image verified: ${env.FRONTEND_TAG}"
+                    }
+                }
+            }
+        }
+
+        //======================================================================
+        // Stage 4: Production Approval Gate
         //======================================================================
         stage('Production Approval') {
             when {
-                expression { params.ENVIRONMENT == 'prod' }
+                expression { params.ENVIRONMENT == 'prod' && !params.DRY_RUN }
             }
             steps {
                 script {
                     echo "🔴 PRODUCTION DEPLOYMENT REQUIRES APPROVAL"
                     
                     def approvalMessage = """
-                    ═══════════════════════════════════════════════════════════
-                    🔴 PRODUCTION GITOPS UPDATE APPROVAL REQUIRED
-                    ═══════════════════════════════════════════════════════════
-                    
-                    Backend Image Tag: ${env.BACKEND_TAG}
-                    Frontend Image Tag: ${env.FRONTEND_TAG}
-                    
-                    This will update the GitOps repository and ArgoCD will
-                    automatically deploy to PRODUCTION.
-                    
-                    ═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════
+🔴 PRODUCTION GITOPS UPDATE APPROVAL REQUIRED
+═══════════════════════════════════════════════════════════
+
+Environment: PRODUCTION
+Namespace: ${env.K8S_NAMESPACE}
+
+Backend Image: ${env.BACKEND_IMAGE}
+Frontend Image: ${env.FRONTEND_IMAGE}
+
+This will update the GitOps repository and ArgoCD will
+automatically deploy to PRODUCTION.
+
+⚠️ This action cannot be undone without a git revert!
+
+═══════════════════════════════════════════════════════════
                     """
                     
                     timeout(time: 30, unit: 'MINUTES') {
                         input(
                             message: approvalMessage,
                             ok: '🚀 Approve Production Update',
-                            submitter: 'admin,devops-lead'
+                            submitter: 'admin,devops-lead,devops-team'
                         )
                     }
+                    echo "✅ Production deployment approved!"
                 }
             }
         }
 
         //======================================================================
-        // Stage 3: Update GitOps Repository
+        // Stage 5: Checkout GitOps Repository
+        //======================================================================
+        stage('Checkout GitOps Repo') {
+            steps {
+                echo "📥 Checking out GitOps repository..."
+                
+                // Clean workspace before checkout
+                cleanWs()
+                
+                // Checkout using Git SCM
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${GITOPS_BRANCH}"]],
+                    extensions: [
+                        [$class: 'CleanBeforeCheckout'],
+                        [$class: 'CloneOption', depth: 1, noTags: false, reference: '', shallow: true]
+                    ],
+                    userRemoteConfigs: [[
+                        credentialsId: 'github-credentials',
+                        url: "${GITOPS_REPO}"
+                    ]]
+                ])
+                
+                echo "✅ Repository checked out successfully"
+                
+                // Show current state
+                sh '''
+                    echo "Current branch:"
+                    git branch
+                    echo ""
+                    echo "GitOps folder structure:"
+                    ls -la gitops/ || echo "gitops folder not found"
+                '''
+            }
+        }
+
+        //======================================================================
+        // Stage 6: Update GitOps Values
         //======================================================================
         stage('Update GitOps') {
             steps {
@@ -170,7 +340,16 @@ pipeline {
                             git config user.email "jenkins@shopdeploy.com"
                             git config user.name "Jenkins GitOps Bot"
 
+                            # Show current values
+                            echo "📋 Current backend values:"
+                            cat gitops/${params.ENVIRONMENT}/backend-values.yaml | grep -A2 "image:" || true
+                            
+                            echo ""
+                            echo "📋 Current frontend values:"
+                            cat gitops/${params.ENVIRONMENT}/frontend-values.yaml | grep -A2 "image:" || true
+
                             # Update backend values
+                            echo ""
                             echo "📝 Updating backend image tag to ${env.BACKEND_TAG}..."
                             sed -i 's|tag:.*|tag: "${env.BACKEND_TAG}"|g' gitops/${params.ENVIRONMENT}/backend-values.yaml
 
@@ -178,23 +357,49 @@ pipeline {
                             echo "📝 Updating frontend image tag to ${env.FRONTEND_TAG}..."
                             sed -i 's|tag:.*|tag: "${env.FRONTEND_TAG}"|g' gitops/${params.ENVIRONMENT}/frontend-values.yaml
 
+                            # Show updated values
+                            echo ""
+                            echo "📋 Updated backend values:"
+                            cat gitops/${params.ENVIRONMENT}/backend-values.yaml | grep -A2 "image:" || true
+                            
+                            echo ""
+                            echo "📋 Updated frontend values:"
+                            cat gitops/${params.ENVIRONMENT}/frontend-values.yaml | grep -A2 "image:" || true
+
                             # Show diff
-                            echo "📋 Changes:"
+                            echo ""
+                            echo "📋 Git diff:"
                             git diff gitops/${params.ENVIRONMENT}/
 
-                            # Commit changes
-                            git add gitops/${params.ENVIRONMENT}/
-                            git commit -m "🚀 [GitOps] Deploy to ${params.ENVIRONMENT}
+                            # Check if there are changes
+                            if git diff --quiet gitops/${params.ENVIRONMENT}/; then
+                                echo "⚠️ No changes detected - values already up to date"
+                            else
+                                # Stage changes
+                                git add gitops/${params.ENVIRONMENT}/
+                                
+                                # Commit changes
+                                git commit -m "🚀 [GitOps] Deploy to ${params.ENVIRONMENT}
 
+Environment: ${params.ENVIRONMENT}
+Namespace: ${env.K8S_NAMESPACE}
 Backend: ${env.BACKEND_TAG}
 Frontend: ${env.FRONTEND_TAG}
+
 Pipeline: #${BUILD_NUMBER}
-Triggered by: ${BUILD_USER_ID ?: 'Jenkins'}
 
-[skip ci]" || echo "No changes to commit"
+[skip ci]"
 
-                            # Push to remote
-                            git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/YOUR_USERNAME/shopdeploy.git HEAD:${GITOPS_BRANCH}
+                                if [ "${params.DRY_RUN}" = "true" ]; then
+                                    echo "⚠️ DRY RUN - Skipping push"
+                                    echo "Would push to: ${GITOPS_REPO}"
+                                else
+                                    # Push to remote
+                                    echo "📤 Pushing changes to remote..."
+                                    git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git HEAD:${GITOPS_BRANCH}
+                                    echo "✅ Changes pushed successfully!"
+                                fi
+                            fi
                         """
                     }
                 }
@@ -202,57 +407,98 @@ Triggered by: ${BUILD_USER_ID ?: 'Jenkins'}
         }
 
         //======================================================================
-        // Stage 4: Verify ArgoCD Sync (Optional)
+        // Stage 7: Verify ArgoCD Sync
         //======================================================================
         stage('Verify ArgoCD Sync') {
+            when {
+                expression { !params.DRY_RUN }
+            }
             steps {
-                echo "⏳ Waiting for ArgoCD to sync..."
+                echo "⏳ Waiting for ArgoCD to detect changes..."
                 script {
                     // Give ArgoCD time to detect changes
                     sleep(time: 30, unit: 'SECONDS')
 
-                    // Check ArgoCD application status (requires argocd CLI)
+                    // Check ArgoCD application status
                     sh """
+                        echo "═══════════════════════════════════════════════════════════"
+                        echo "🔄 ArgoCD Sync Status"
+                        echo "═══════════════════════════════════════════════════════════"
+                        
                         # Check if argocd CLI is available
                         if command -v argocd &> /dev/null; then
                             echo "Checking ArgoCD application status..."
-                            argocd app get shopdeploy-backend-${params.ENVIRONMENT} --refresh || true
-                            argocd app get shopdeploy-frontend-${params.ENVIRONMENT} --refresh || true
+                            
+                            # Refresh and get backend app status
+                            echo ""
+                            echo "Backend Application:"
+                            argocd app get shopdeploy-backend-${params.ENVIRONMENT} --refresh 2>/dev/null || echo "  ⚠️ Could not fetch status"
+                            
+                            # Refresh and get frontend app status
+                            echo ""
+                            echo "Frontend Application:"
+                            argocd app get shopdeploy-frontend-${params.ENVIRONMENT} --refresh 2>/dev/null || echo "  ⚠️ Could not fetch status"
                         else
-                            echo "ArgoCD CLI not installed - check ArgoCD UI for sync status"
-                            echo "Applications to verify:"
-                            echo "  - shopdeploy-backend-${params.ENVIRONMENT}"
-                            echo "  - shopdeploy-frontend-${params.ENVIRONMENT}"
+                            echo "ℹ️ ArgoCD CLI not installed on Jenkins agent"
+                            echo ""
+                            echo "Please verify deployment in ArgoCD UI:"
+                            echo "  📦 Applications to check:"
+                            echo "     - shopdeploy-backend-${params.ENVIRONMENT}"
+                            echo "     - shopdeploy-frontend-${params.ENVIRONMENT}"
+                            echo ""
+                            echo "  🎯 Expected State:"
+                            echo "     Namespace: ${env.K8S_NAMESPACE}"
+                            echo "     Backend Image: ${env.BACKEND_IMAGE}"
+                            echo "     Frontend Image: ${env.FRONTEND_IMAGE}"
                         fi
+                        
+                        echo "═══════════════════════════════════════════════════════════"
                     """
                 }
             }
         }
     }
 
+    //==========================================================================
+    // Post-Build Actions
+    //==========================================================================
     post {
         success {
             script {
+                def dryRunNote = params.DRY_RUN ? " (DRY RUN)" : ""
+                
                 echo "═══════════════════════════════════════════════════════════"
-                echo "${env.ENV_EMOJI} GITOPS UPDATE SUCCESS"
+                echo "${env.ENV_EMOJI} GITOPS UPDATE SUCCESS${dryRunNote}"
                 echo "═══════════════════════════════════════════════════════════"
                 echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
-                echo "Backend Tag: ${env.BACKEND_TAG}"
-                echo "Frontend Tag: ${env.FRONTEND_TAG}"
+                echo "Namespace: ${env.K8S_NAMESPACE}"
+                echo "Backend Image: ${env.BACKEND_IMAGE}"
+                echo "Frontend Image: ${env.FRONTEND_IMAGE}"
                 echo ""
-                echo "ArgoCD will automatically sync and deploy the changes."
-                echo "Check ArgoCD UI for deployment status."
+                if (!params.DRY_RUN) {
+                    echo "🔄 ArgoCD will automatically sync and deploy the changes."
+                    echo "📊 Check ArgoCD UI for deployment status."
+                } else {
+                    echo "⚠️ DRY RUN completed - no changes were pushed."
+                }
                 echo "═══════════════════════════════════════════════════════════"
 
                 // Slack notification
-                try {
-                    slackSend(
-                        channel: '#deployments',
-                        color: 'good',
-                        message: "${env.ENV_EMOJI} GitOps Update | ${params.ENVIRONMENT.toUpperCase()} | Backend: ${env.BACKEND_TAG} | Frontend: ${env.FRONTEND_TAG}"
-                    )
-                } catch (Exception e) {
-                    echo "Slack notification skipped"
+                if (env.SLACK_ENABLED == 'true' && !params.DRY_RUN) {
+                    try {
+                        slackSend(
+                            channel: '#deployments',
+                            color: env.ENV_COLOR,
+                            message: """${env.ENV_EMOJI} *GitOps Update Success*
+• Environment: ${params.ENVIRONMENT.toUpperCase()}
+• Namespace: ${env.K8S_NAMESPACE}
+• Backend: `${env.BACKEND_TAG}`
+• Frontend: `${env.FRONTEND_TAG}`
+• Build: <${BUILD_URL}|#${BUILD_NUMBER}>"""
+                        )
+                    } catch (Exception e) {
+                        echo "Slack notification failed: ${e.message}"
+                    }
                 }
             }
         }
@@ -262,17 +508,47 @@ Triggered by: ${BUILD_USER_ID ?: 'Jenkins'}
                 echo "═══════════════════════════════════════════════════════════"
                 echo "❌ GITOPS UPDATE FAILED"
                 echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                echo "Build: #${BUILD_NUMBER}"
+                echo "═══════════════════════════════════════════════════════════"
 
-                try {
-                    slackSend(
-                        channel: '#deployments',
-                        color: 'danger',
-                        message: "❌ GitOps Update FAILED | ${params.ENVIRONMENT.toUpperCase()} | <${BUILD_URL}|View Logs>"
-                    )
-                } catch (Exception e) {
-                    echo "Slack notification skipped"
+                // Slack notification
+                if (env.SLACK_ENABLED == 'true') {
+                    try {
+                        slackSend(
+                            channel: '#deployments',
+                            color: 'danger',
+                            message: """❌ *GitOps Update Failed*
+• Environment: ${params.ENVIRONMENT.toUpperCase()}
+• Build: <${BUILD_URL}|#${BUILD_NUMBER}>
+• <${BUILD_URL}console|View Logs>"""
+                        )
+                    } catch (Exception e) {
+                        echo "Slack notification failed: ${e.message}"
+                    }
                 }
             }
+        }
+
+        aborted {
+            script {
+                echo "═══════════════════════════════════════════════════════════"
+                echo "⚠️ GITOPS UPDATE ABORTED"
+                echo "═══════════════════════════════════════════════════════════"
+                echo "Environment: ${params.ENVIRONMENT.toUpperCase()}"
+                echo "Build: #${BUILD_NUMBER}"
+                echo "═══════════════════════════════════════════════════════════"
+            }
+        }
+
+        always {
+            // Clean up workspace
+            cleanWs(
+                cleanWhenNotBuilt: false,
+                deleteDirs: true,
+                disableDeferredWipeout: true,
+                notFailBuild: true
+            )
         }
     }
 }

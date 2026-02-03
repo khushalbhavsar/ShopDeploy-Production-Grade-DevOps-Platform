@@ -634,7 +634,7 @@ Build: #${BUILD_NUMBER}
 Commit: ${GIT_COMMIT}"
                                 
                                 # Push using token authentication
-                                git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/YOUR_USERNAME/shopdeploy.git HEAD:main
+                                git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git HEAD:main
                                 
                                 echo "✅ GitOps repository updated successfully!"
                                 echo "ArgoCD will auto-sync and deploy the new image."
