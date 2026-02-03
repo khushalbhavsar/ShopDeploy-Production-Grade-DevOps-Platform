@@ -15,7 +15,7 @@ spec:
   project: shopdeploy
 
   source:
-    repoURL: https://github.com/YOUR_USERNAME/shopdeploy.git
+    repoURL: https://github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git
     targetRevision: main
     path: helm/backend
     helm:

@@ -14,8 +14,8 @@ spec:
 
   # Source repositories allowed
   sourceRepos:
-    - 'https://github.com/YOUR_USERNAME/shopdeploy.git'
-    - 'https://github.com/YOUR_USERNAME/shopdeploy-gitops.git'
+    - 'https://github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git'
+    - 'https://github.com/khushalbhavsar/ShopDeploy-Cloud-Native-DevOps-Platform.git'
 
   # Destination clusters and namespaces
   destinations:
