@@ -5,7 +5,7 @@
 
 image:
   repository: "${ECR_REGISTRY}/shopdeploy-prod-backend"
-  tag: "latest"  # Updated by CI pipeline (e.g., "42-abc1234")
+  tag: "6-4f76d77"
   pullPolicy: IfNotPresent
 
 replicaCount: 3
