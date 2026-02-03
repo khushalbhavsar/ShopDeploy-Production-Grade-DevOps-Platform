@@ -4,7 +4,7 @@
 
 image:
   repository: "${ECR_REGISTRY}/shopdeploy-prod-frontend"
-  tag: "20-c4fa147"
+  tag: "21-672d06b"
   pullPolicy: Always
 
 replicaCount: 1
